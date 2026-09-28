@@ -50,7 +50,7 @@
     display: {
       fontSize: 16, showTimestamps: true, showAvatars: true, showPlatformIcons: true, showBadges: true,
       maxMessages: 300, theme: 'dark', overlayFadeSec: 30, alertsInChat: true, platformColors: true,
-      panelLayout: 'auto', // alerts panel: 'auto' (right of chat; above it on narrow/portrait screens), 'side' or 'stacked'
+      panelLayout: 'auto', // alerts panel: 'auto' (right of chat; above it on narrow/portrait screens), 'side' or 'stacked' (the divider's ⇄ flips sides per device)
       removeDoneAfterSec: 30, // thanked alerts / answered questions leave the panel after this long (0 = keep them)
       keepAwake: false, // chat page: stop this device's screen from sleeping while the chat is showing
       showViewerCounts: false, // viewer counts next to each platform's status dot (off: never shown anywhere)

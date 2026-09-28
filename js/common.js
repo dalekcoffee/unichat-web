@@ -508,6 +508,6 @@
     return { available: !!synth, voices, say, forEvent, stop, speaking };
   })();
 
-  const VERSION = '0.0.8';
+  const VERSION = '0.0.9';
   window.UniChat = { VERSION, api, storePin, fmtMoney, icon, esc, safeUrl, safeColor, renderEvent, connect, Sound, Speech, classify, plainText, NAMES, PLATFORMS, ALERT_KINDS, KIND_LABEL, KIND_EMOJI, fmtTime, nameHtml, avatarHtml, swapAvatar, partsHtml, shownParts, userColor, statusTone, fmtCount, fmtDuration };
 })();

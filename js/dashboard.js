@@ -50,6 +50,7 @@
   const viewerCard = $('#viewerCard');
   const mainEl = $('#main');
   const splitter = $('#splitter');
+  const splitFlip = $('#splitFlip');
 
   let settings = null;
   let statuses = [];
@@ -507,6 +508,7 @@
   function renderPanelToggle() {
     alertsPanel.classList.toggle('hidden', !panelOpen);
     splitter.classList.toggle('hidden', !panelOpen);
+    splitFlip.classList.toggle('hidden', !panelOpen);
     alertsBtn.classList.toggle('active', panelOpen);
     alertsBtn.setAttribute('aria-expanded', String(panelOpen));
   }
@@ -521,11 +523,16 @@
   const CHAT_MIN = 380;                              // narrowest comfortable chat column (px)
   const PANEL_MIN_W = 240;                           // narrowest usable panel beside the chat (px)
   const PANEL_MIN_H = 110;                           // shortest usable panel above the chat (px)
+  const CHAT_MIN_H = 140;                            // shortest chat beside a stacked panel (px; the panel's max-height in style.css)
   const SPLIT_DEFAULT = { side: 0.2, stacked: 0.2 }; // the panel's share of the width (beside) / height (above)
   const clampNum = (v, lo, hi) => Math.min(hi, Math.max(lo, Number.isFinite(Number(v)) ? Number(v) : lo));
   let split = Object.assign({}, SPLIT_DEFAULT, store.get('unichat.web.panelSplit', {}));
   let stacked = false;
   try { localStorage.removeItem('unichat.web.panelSize'); } catch { /* older size format, no longer used */ }
+  // The divider's ⇄ button flips the layout in use: side by side the panel moves left of the chat, stacked it moves
+  // below it. Each layout keeps its own choice, saved on this device (not in links), like the divider position.
+  const savedFlip = store.get('unichat.web.panelFlip', null) || {};
+  const flip = { side: savedFlip.side === true, stacked: savedFlip.stacked === true };
 
   function applyLayout() {
     const mode = (settings && settings.display && settings.display.panelLayout) || 'auto';
@@ -534,18 +541,31 @@
     // Automatic: above the chat when there isn't room for both side by side, or on a tall (portrait) screen.
     stacked = mode === 'stacked' || (mode === 'auto' && (w < CHAT_MIN + PANEL_MIN_W || h > w * 1.15));
     document.body.classList.toggle('stacked', stacked);
+    document.body.classList.toggle('panel-flipped', stacked ? flip.stacked : flip.side);
     const mw = mainEl.clientWidth || w;
     const mh = mainEl.clientHeight || h;
     const width = Math.round(clampNum(split.side * mw, PANEL_MIN_W, Math.max(PANEL_MIN_W, mw - CHAT_MIN)));
-    const height = Math.round(clampNum(split.stacked * mh, PANEL_MIN_H, Math.max(PANEL_MIN_H, mh * 0.75)));
+    // Same limits as the CSS, so --panel-h is the panel's real height (the ⇄ button is placed with it).
+    const height = Math.round(clampNum(split.stacked * mh, PANEL_MIN_H, Math.max(PANEL_MIN_H, Math.min(mh * 0.75, mh - CHAT_MIN_H))));
     mainEl.style.setProperty('--panel-w', width + 'px');
     mainEl.style.setProperty('--panel-h', height + 'px');
     splitter.setAttribute('aria-orientation', stacked ? 'horizontal' : 'vertical');
     splitter.setAttribute('aria-valuenow', String(Math.round(stacked ? height / Math.max(1, mh) * 100 : width / Math.max(1, mw) * 100)));
     splitter.title = 'Drag to resize the panel · double-click to reset';
+    const flipLabel = stacked ? (flip.stacked ? 'Move the alerts above the chat' : 'Move the alerts below the chat')
+      : (flip.side ? 'Move the alerts to the right of the chat' : 'Move the alerts to the left of the chat');
+    splitFlip.title = flipLabel;
+    splitFlip.setAttribute('aria-label', flipLabel);
   }
 
   function saveSplit() { store.set('unichat.web.panelSplit', split); }
+
+  splitFlip.addEventListener('click', () => {
+    if (stacked) flip.stacked = !flip.stacked;
+    else flip.side = !flip.side;
+    store.set('unichat.web.panelFlip', flip);
+    applyLayout();
+  });
 
   splitter.addEventListener('pointerdown', e => {
     if (e.button !== 0) return;
@@ -554,8 +574,8 @@
     document.body.classList.add('resizing');
     const move = ev => {
       const r = mainEl.getBoundingClientRect();
-      if (stacked) split.stacked = clampNum((ev.clientY - r.top) / r.height, PANEL_MIN_H / r.height, 0.75);
-      else split.side = clampNum((r.right - ev.clientX) / r.width, PANEL_MIN_W / r.width, Math.max(PANEL_MIN_W, r.width - CHAT_MIN) / r.width);
+      if (stacked) split.stacked = clampNum((flip.stacked ? r.bottom - ev.clientY : ev.clientY - r.top) / r.height, PANEL_MIN_H / r.height, 0.75);
+      else split.side = clampNum((flip.side ? ev.clientX - r.left : r.right - ev.clientX) / r.width, PANEL_MIN_W / r.width, Math.max(PANEL_MIN_W, r.width - CHAT_MIN) / r.width);
       applyLayout();
     };
     const end = () => {
@@ -574,8 +594,10 @@
     const step = (e.shiftKey ? 3 : 1) * 0.02;
     // Start from the panel's actual size (it may be held at its minimum), so every key press visibly changes it.
     const now = stacked ? alertsPanel.offsetHeight / Math.max(1, mainEl.clientHeight) : alertsPanel.offsetWidth / Math.max(1, mainEl.clientWidth);
-    if (stacked && (e.key === 'ArrowUp' || e.key === 'ArrowDown')) split.stacked = clampNum(now + (e.key === 'ArrowDown' ? step : -step), 0.05, 0.75);
-    else if (!stacked && (e.key === 'ArrowLeft' || e.key === 'ArrowRight')) split.side = clampNum(now + (e.key === 'ArrowLeft' ? step : -step), 0.05, 0.75);
+    // The arrow pointing away from the panel moves the line that way and makes the panel bigger.
+    const grow = stacked ? (flip.stacked ? 'ArrowUp' : 'ArrowDown') : (flip.side ? 'ArrowRight' : 'ArrowLeft');
+    if (stacked && (e.key === 'ArrowUp' || e.key === 'ArrowDown')) split.stacked = clampNum(now + (e.key === grow ? step : -step), 0.05, 0.75);
+    else if (!stacked && (e.key === 'ArrowLeft' || e.key === 'ArrowRight')) split.side = clampNum(now + (e.key === grow ? step : -step), 0.05, 0.75);
     else if (e.key === 'Enter' || e.key === 'Home') split = Object.assign({}, SPLIT_DEFAULT);
     else return;
     e.preventDefault();
