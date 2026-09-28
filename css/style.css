@@ -206,6 +206,11 @@ button, input, select, textarea { font: inherit; color: inherit; }
 /* A 7TV "zero-width" emote drawn over the emote before it */
 .emote-stack { display: inline-grid; vertical-align: middle; margin: -0.25em 1px; }
 .emote-stack > .emote { grid-area: 1 / 1; margin: 0; justify-self: center; align-self: center; }
+/* A Twitch (GIPHY) GIF on its own line. Its height is fixed, so the chat doesn't jump when it finishes loading; a wide
+   one is shrunk to fit the column instead of stretched. */
+.chat-gif { display: block; height: 7em; width: auto; max-width: 100%; object-fit: contain; object-position: left center; margin: 4px 0 2px; border-radius: 6px; }
+.ap-item .msgtext .chat-gif { height: 4.5em; }
+.popup .p-msg .chat-gif { height: 6em; margin-left: auto; margin-right: auto; object-position: center; }
 .msg.silent-note .text { color: var(--text-dim); }
 
 /* Hide optional pieces via body classes */

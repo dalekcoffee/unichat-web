@@ -397,7 +397,7 @@
     const img = document.createElement('img');
     img.alt = '';
     img.referrerPolicy = 'no-referrer';
-    if (u.avatar) img.src = u.avatar; // Nimo's own image servers only (checked in nimo.js)
+    if (typeof u.avatar === 'string' && /^https:\/\//i.test(u.avatar)) img.src = u.avatar; // Nimo's own image servers (checked in nimo.js; https here too)
     const info = document.createElement('div');
     info.className = 'grow';
     const name = document.createElement('b');

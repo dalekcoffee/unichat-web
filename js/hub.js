@@ -100,9 +100,13 @@
   window.addEventListener('pagehide', () => { if (viewersDirty) writeJson(VIEWERS_KEY, viewers); });
 
   /** Remembers who has chatted before; returns true for a first-ever message (after a learning period). */
+  const viewerCounts = Object.create(null); // platform → how many are remembered (counted once, then kept up to date)
   function recordViewer(platform, login) {
     const mem = viewers[platform] || (viewers[platform] = { since: now(), users: Object.create(null) });
-    if (mem.users[login] || Object.keys(mem.users).length >= 20000) return false;
+    if (mem.users[login]) return false;
+    if (viewerCounts[platform] === undefined) viewerCounts[platform] = Object.keys(mem.users).length;
+    if (viewerCounts[platform] >= 20000) return false;
+    viewerCounts[platform]++;
     mem.users[login] = now();
     viewersDirty = true;
     return now() - mem.since >= LEARNING_MS;
@@ -202,12 +206,41 @@
     return '';
   }
 
+  // Twitch GIFs are GIPHY's, served from its media servers (media.giphy.com, media0–4.giphy.com, i.giphy.com). Twitch
+  // requires their address to be used exactly as sent, so it's checked here but never changed. With GIFs turned off in
+  // Settings they arrive as their caption text, and nothing is loaded from GIPHY.
+  const GIF_HOST = /^(?:media\d{0,2}|i)\.giphy\.com$/;
+  const gifsOn = () => !(state.settings && state.settings.display && state.settings.display.showGifs === false);
+  function gifUrl(platform, url) {
+    if (platform !== 'twitch' || typeof url !== 'string' || !url || url.length > 2000) return '';
+    let host;
+    try {
+      const u = new URL(url);
+      if (u.protocol !== 'https:' || u.username || u.password || u.port) return '';
+      host = u.hostname.toLowerCase();
+    } catch { return ''; }
+    if (GIF_HOST.test(host)) return url;
+    if (!reportedHosts.has(host) && reportedHosts.size < 50) {
+      reportedHosts.add(host);
+      hub.diagnostic(`${platform}: skipped a GIF from ${host} (not one of GIPHY's media servers)`);
+    }
+    return '';
+  }
+
   // 7TV, BetterTTV and FrankerFaceZ emotes (emotes.js) can appear in any platform's chat. Their addresses are built from
   // the emote's ID, so only these exact shapes are accepted (e.g. from chat saved in this tab).
   const SHARED_EMOTE = /^https:\/\/(cdn\.7tv\.app\/emote\/[A-Za-z0-9]{1,40}\/1x\.webp|cdn\.betterttv\.net\/emote\/[A-Za-z0-9]{1,40}\/1x\.webp|cdn\.betterttv\.net\/frankerfacez_emote\/\d{1,12}\/1)$/;
   const sharedEmoteUrl = url => (typeof url === 'string' && SHARED_EMOTE.test(url) ? url : '');
 
+  // Values that become part of a line's CSS classes (saved events can be edited in the browser's storage).
+  const EVENT_PLATFORMS = ['twitch', 'tiktok', 'kick', 'velora', 'blaze', 'nimo', 'youtube', 'system'];
+  const EVENT_KINDS = ['chat', 'system', ...ALERT_KINDS];
+  const LEVELS = ['info', 'ok', 'warn', 'error'];
+
   function tidyEvent(e) {
+    if (!EVENT_PLATFORMS.includes(e.platform)) e.platform = 'system';
+    if (!EVENT_KINDS.includes(e.kind)) e.kind = 'chat';
+    if (e.level !== undefined && !LEVELS.includes(e.level)) e.level = 'info';
     if (e.user && typeof e.user === 'object' && !Array.isArray(e.user)) {
       e.user.name = tidy(e.user.name, 60);
       e.user.login = tidy(e.user.login, 60);
@@ -221,6 +254,10 @@
       .filter(p => p && typeof p === 'object')
       .map(p => {
         const v = tidy(p.v, p.t === 'emote' ? 100 : 1000);
+        if (p.t === 'gif') {
+          const url = gifsOn() && gifUrl(e.platform, p.url);
+          return url ? { t: 'gif', v, url } : { t: 'text', v }; // otherwise its caption, e.g. "[Yes GIF by …]"
+        }
         if (p.t !== 'emote') return { ...p, v };
         const url = (p.typed && sharedEmoteUrl(p.url)) || imageFor(e.platform, p.url);
         return url ? { ...p, v, url } : { t: 'text', v }; // an emote from anywhere else shows as its name

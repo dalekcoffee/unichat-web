@@ -128,24 +128,50 @@
     if (live && isQuestion(e)) addToPanelList(questions, e, 'questions');
 
     const cls = U.classify(e, settings);
-    const stick = followNewest || nearBottom();
     const el = feedElement(e, cls);
-    if (el) {
-      empty.classList.add('hidden');
-      feed.appendChild(el);
-      trim();
-      if (stick) scrollToBottom();
-      else if (live && !el.classList.contains('hidden')) {
-        unseen++;
-        jump.textContent = `↓ ${unseen} new message${unseen === 1 ? '' : 's'}`;
-        jump.classList.remove('hidden');
-      }
-    }
+    if (el) queueLine(el, live);
 
     if (!live || cls.hidden) return;
     if (soundOn) U.Sound.forEvent(e, settings, cls);
     maybePopup(e);
     if (soundOn && U.Sound.unlocked()) U.Speech.forEvent(e, settings, cls);
+  }
+
+  // New lines join the chat in batches, once per screen frame: a flood of messages (e.g. a bot raid) then costs one
+  // layout per frame instead of one per message, and lines that would scroll out of the kept history straight away are
+  // never drawn. Anything that changes lines already shown (delete, clear, pins, hiding a platform) adds the waiting
+  // batch first (flushLines), so it sees every line.
+  let pendingLines = [];
+  let flushQueued = false;
+  function queueLine(el, live) {
+    pendingLines.push({ el, live });
+    if (pendingLines.length > maxMessages()) pendingLines.splice(0, pendingLines.length - maxMessages());
+    if (flushQueued) return;
+    flushQueued = true;
+    // Animation frames pause in a background tab; a short timer keeps a hidden chat current.
+    if (document.hidden) setTimeout(flushLines, 250); else requestAnimationFrame(flushLines);
+  }
+  function flushLines() {
+    flushQueued = false;
+    if (!pendingLines.length) return;
+    const batch = pendingLines;
+    pendingLines = [];
+    const stick = followNewest || nearBottom();
+    const frag = document.createDocumentFragment();
+    let fresh = 0;
+    for (const { el, live } of batch) {
+      frag.appendChild(el);
+      if (live && !el.classList.contains('hidden')) fresh++;
+    }
+    empty.classList.add('hidden');
+    feed.appendChild(frag);
+    trim();
+    if (stick) scrollToBottom();
+    else if (fresh) {
+      unseen += fresh;
+      jump.textContent = `↓ ${unseen} new message${unseen === 1 ? '' : 's'}`;
+      jump.classList.remove('hidden');
+    }
   }
 
   function trim() {
@@ -160,6 +186,7 @@
   }
 
   function rerenderFeed() {
+    pendingLines = []; // redrawn below from `events`, which already has them
     Array.from(feed.getElementsByClassName('msg')).forEach(m => m.remove());
     const frag = document.createDocumentFragment();
     for (const e of events) {
@@ -856,6 +883,7 @@
   }
 
   function toggleHidden(platform) {
+    flushLines();
     if (hidden.has(platform)) hidden.delete(platform); else hidden.add(platform);
     store.set('unichat.hiddenPlatforms', Array.from(hidden));
     feed.querySelectorAll(`.msg[data-platform="${CSS.escape(platform)}"]:not(.sys)`).forEach(m => m.classList.toggle('hidden', hidden.has(platform)));
@@ -931,13 +959,13 @@
   function renderBanners() {
     const rows = [];
     if (serverDown) {
-      rows.push(`<div class="banner err">${WARN_ICON}<span><b>Lost connection to UniChat</b> on ${U.esc(location.host)} <span class="muted">· ${countdown(serverDown.nextRetryAt)} (attempt ${serverDown.attempt})</span></span></div>`);
+      rows.push(`<div class="banner err">${WARN_ICON}<span><b>Lost connection to UniChat</b> on ${U.esc(location.host)} <span class="muted">· ${countdown(serverDown.nextRetryAt)} (attempt ${Number(serverDown.attempt) || 0})</span></span></div>`);
     } else {
       for (const s of statuses.filter(x => x.state === 'reconnecting' || x.state === 'error')) {
         if (dismissed[s.id] === s.since) continue;
-        const extra = [s.nextRetryAt ? countdown(s.nextRetryAt) : 'retrying now…', s.attempt ? `attempt ${s.attempt}` : ''].filter(Boolean).join(' · ');
-        rows.push(`<div class="banner ${s.state === 'error' ? 'err' : ''}">${U.icon(s.platform)}<span><b>${U.esc(s.label)}</b>: ${U.esc(s.detail)} <span class="muted">· ${extra}</span></span>` +
-          `<button class="x" type="button" data-dismiss="${U.esc(s.id)}" data-since="${s.since}" title="Hide until this changes (the status dot keeps showing it)">×</button></div>`);
+        const extra = [s.nextRetryAt ? countdown(s.nextRetryAt) : 'retrying now…', s.attempt ? `attempt ${Number(s.attempt) || 0}` : ''].filter(Boolean).join(' · ');
+        rows.push(`<div class="banner ${s.state === 'error' ? 'err' : ''}">${U.icon(s.platform)}<span><b>${U.esc(s.label)}</b>: ${U.esc(s.detail)} <span class="muted">· ${U.esc(extra)}</span></span>` +
+          `<button class="x" type="button" data-dismiss="${U.esc(s.id)}" data-since="${Number(s.since) || 0}" title="Hide until this changes (the status dot keeps showing it)">×</button></div>`);
       }
     }
     bannersEl.innerHTML = rows.join('');
@@ -1047,6 +1075,7 @@
     onOpen() { serverDown = null; renderBanners(); },
     onClose(info) { serverDown = info; renderBanners(); },
     onMessage(msg) {
+      if (msg.type !== 'event') flushLines(); // lines still waiting for the next frame join first (see queueLine)
       switch (msg.type) {
         case 'hello':
           applySettings(msg.settings);

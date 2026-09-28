@@ -42,27 +42,43 @@
     return m;
   }
 
-  /** Split a message into text + emote parts. Twitch's emote positions count Unicode code points. */
-  function buildParts(text, emotesTag) {
-    if (!emotesTag) return [{ t: 'text', v: text }];
+  // GIPHY GIFs, sent by Tier 2 and 3 subscribers: the "gifs" tag lists "<start>-<end>|<gifID>|<url>" entries, comma-
+  // separated. The message text in that range is GIPHY's caption in brackets, e.g. "[Yes GIF by …]". A URL can contain
+  // commas, so only a comma that starts the next "<n>-<n>|" entry splits. Twitch requires the URL to be used exactly as
+  // sent (hub.js checks it's one of GIPHY's servers, but never changes it).
+  function gifRanges(tag, length) {
+    const out = [];
+    for (const entry of String(tag || '').split(/,(?=\d+-\d+\|)/)) {
+      const m = /^(\d+)-(\d+)\|[^|]*\|(\S+)$/.exec(entry);
+      if (!m) continue;
+      const a = Number(m[1]), b = Number(m[2]);
+      if (b >= a && b < length) out.push([a, b, { t: 'gif', url: m[3] }]);
+    }
+    return out;
+  }
+
+  /** Split a message into text, emote and GIF parts. Twitch's positions count Unicode code points. */
+  function buildParts(text, emotesTag, gifsTag) {
+    if (!emotesTag && !gifsTag) return [{ t: 'text', v: text }];
     const chars = Array.from(text);
     const ranges = [];
-    for (const emote of emotesTag.split('/')) {
+    for (const emote of (emotesTag || '').split('/')) {
       const colon = emote.indexOf(':');
       if (colon <= 0) continue;
       const id = emote.slice(0, colon);
       for (const r of emote.slice(colon + 1).split(',')) {
         const [a, b] = r.split('-').map(Number);
-        if (Number.isInteger(a) && Number.isInteger(b) && a >= 0 && b >= a && b < chars.length) ranges.push([a, b, id]);
+        if (Number.isInteger(a) && Number.isInteger(b) && a >= 0 && b >= a && b < chars.length) ranges.push([a, b, { t: 'emote', url: EMOTE_URL(id) }]);
       }
     }
+    ranges.push(...gifRanges(gifsTag, chars.length));
     ranges.sort((x, y) => x[0] - y[0]);
     const parts = [];
     let pos = 0;
-    for (const [a, b, id] of ranges) {
+    for (const [a, b, part] of ranges) {
       if (a < pos) continue;
       if (a > pos) parts.push({ t: 'text', v: chars.slice(pos, a).join('') });
-      parts.push({ t: 'emote', v: chars.slice(a, b + 1).join(''), url: EMOTE_URL(id) });
+      parts.push({ ...part, v: chars.slice(a, b + 1).join('') });
       pos = b + 1;
     }
     if (pos < chars.length) parts.push({ t: 'text', v: chars.slice(pos).join('') });
@@ -125,8 +141,9 @@
     let text = m.trailing || '';
     if (text.startsWith('\u0001ACTION ') && text.endsWith('\u0001')) text = text.slice(8, -1);
 
-    // Emote positions refer to the original text, so split first, then drop Twitch's "@name " reply prefix.
-    const parts = buildParts(text, m.tags.emotes);
+    // Emote and GIF positions refer to the original text, so split first, then drop Twitch's "@name " reply prefix.
+    // (GIFs only come in chat messages, never in sub/raid notices.)
+    const parts = buildParts(text, m.tags.emotes, m.tags.gifs);
     let reply = null;
     const parent = m.tags['reply-parent-display-name'];
     if (parent) {

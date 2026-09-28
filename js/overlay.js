@@ -4,11 +4,13 @@
   const U = window.UniChat;
   const feed = document.getElementById('feed');
   const q = new URLSearchParams(location.search);
+  /** A number from the link, kept within sensible limits (a link can't make the text giant or keep lines forever). */
+  const within = (name, lo, hi) => { const n = Number(q.get(name)); return q.has(name) && q.get(name) !== '' && Number.isFinite(n) ? Math.min(hi, Math.max(lo, n)) : null; };
 
   const opt = {
-    fade: q.has('fade') ? Number(q.get('fade')) : null,
-    size: q.has('size') ? Number(q.get('size')) : null,
-    max: Number(q.get('max')) || 30,
+    fade: within('fade', 0, 3600),
+    size: within('size', 8, 200),
+    max: Math.round(within('max', 1, 500) || 30),
     chat: q.get('chat') !== '0',
     alerts: q.get('alerts') !== '0',
     sound: q.get('sound') === '1',

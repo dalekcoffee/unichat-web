@@ -94,8 +94,6 @@
       if (s.velora && s.velora.channel) myNames.push(s.velora.channel);
       if (s.blaze && s.blaze.channel) myNames.push(s.blaze.channel);
       if (s.nimo && s.nimo.channel && !/^\d+$/.test(s.nimo.channel)) myNames.push(s.nimo.channel); // not a room number
-      const yt = s.youTube && s.youTube.channel ? s.youTube.channel.match(/@([\w.-]+)/) : null;
-      if (yt) myNames.push(yt[1]);
     }
     r = {
       hideBots: !!f.hideBots,
@@ -166,6 +164,14 @@
     const out = [];
     let stack = null; // the last emote, while only spaces follow it: { at, imgs }
     for (const p of parts || []) {
+      if (p.t === 'gif' && safeUrl(p.url)) {
+        // A Twitch (GIPHY) GIF on its own line; its caption (without the brackets) is the picture's description.
+        const caption = String(p.v == null ? '' : p.v);
+        const alt = caption.replace(/^\[([\s\S]*)\]$/, '$1');
+        out.push(`<img class="chat-gif" src="${esc(p.url)}" alt="${esc(alt)}" title="${esc(alt)}" data-caption="${esc(caption)}" loading="lazy" referrerpolicy="no-referrer">`);
+        stack = null;
+        continue;
+      }
       const url = p.t === 'emote' ? safeUrl(p.url) : '';
       if (!url) {
         out.push(esc(p.v));
@@ -237,10 +243,12 @@
     });
   }
 
-  // A picture that won't load (deleted, expired or blocked) turns back into the coloured initial.
+  // A picture that won't load (deleted, expired or blocked) turns back into the coloured initial, and a GIF into its caption.
   document.addEventListener('error', e => {
     const img = e.target;
-    if (!(img instanceof HTMLImageElement) || !img.classList.contains('avatar')) return;
+    if (!(img instanceof HTMLImageElement)) return;
+    if (img.classList.contains('chat-gif')) { img.replaceWith(document.createTextNode(img.dataset.caption || img.alt || '')); return; }
+    if (!img.classList.contains('avatar')) return;
     const span = document.createElement('span');
     span.className = 'avatar initial';
     span.dataset.avatarFor = img.dataset.avatarFor || '';
@@ -508,6 +516,6 @@
     return { available: !!synth, voices, say, forEvent, stop, speaking };
   })();
 
-  const VERSION = '0.0.10';
+  const VERSION = '0.0.11';
   window.UniChat = { VERSION, api, storePin, fmtMoney, icon, esc, safeUrl, safeColor, renderEvent, connect, Sound, Speech, classify, plainText, NAMES, PLATFORMS, ALERT_KINDS, KIND_LABEL, KIND_EMOJI, fmtTime, nameHtml, avatarHtml, swapAvatar, partsHtml, shownParts, userColor, statusTone, fmtCount, fmtDuration };
 })();

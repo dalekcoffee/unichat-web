@@ -55,6 +55,7 @@
       keepAwake: false, // chat page: stop this device's screen from sleeping while the chat is showing
       showViewerCounts: false, // viewer counts next to each platform's status dot (off: never shown anywhere)
       thirdPartyEmotes: true, // 7TV, BetterTTV and FrankerFaceZ emotes in chat from every platform
+      showGifs: true, // Twitch GIFs (GIPHY); off shows their caption instead and nothing is loaded from GIPHY
     },
   };
 
@@ -76,6 +77,9 @@
     const out = clone(base);
     for (const [k, v] of Object.entries(over)) {
       if (UNSAFE_KEYS.has(k) || v === undefined) continue;
+      // Only settings UniChat has: anything else in a link or file (e.g. an old desktop-app setting) is dropped, so it
+      // can't reach code that expects a different type.
+      if (!Object.prototype.hasOwnProperty.call(out, k)) continue;
       // Keep the shape of known settings: a group stays a group, a list stays a list, a value stays a value.
       const known = out[k];
       if (isObj(known)) { if (isObj(v)) out[k] = merge(known, v); continue; }
