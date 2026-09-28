@@ -50,6 +50,8 @@
   const viewerCard = $('#viewerCard');
   const mainEl = $('#main');
   const splitter = $('#splitter');
+  const splitHandle = $('#splitHandle');
+  const splitGrip = $('#splitGrip');
   const splitFlip = $('#splitFlip');
 
   let settings = null;
@@ -508,7 +510,7 @@
   function renderPanelToggle() {
     alertsPanel.classList.toggle('hidden', !panelOpen);
     splitter.classList.toggle('hidden', !panelOpen);
-    splitFlip.classList.toggle('hidden', !panelOpen);
+    splitHandle.classList.toggle('hidden', !panelOpen);
     alertsBtn.classList.toggle('active', panelOpen);
     alertsBtn.setAttribute('aria-expanded', String(panelOpen));
   }
@@ -520,17 +522,17 @@
   renderPanelToggle();
 
   // ---------- Layout: alerts panel right of the chat, or above it on narrow / portrait screens ----------
-  const CHAT_MIN = 380;                              // narrowest comfortable chat column (px)
-  const PANEL_MIN_W = 240;                           // narrowest usable panel beside the chat (px)
-  const PANEL_MIN_H = 110;                           // shortest usable panel above the chat (px)
-  const CHAT_MIN_H = 140;                            // shortest chat beside a stacked panel (px; the panel's max-height in style.css)
+  const CHAT_MIN = 380;                              // narrowest comfortable chat column (px): below this + PANEL_MIN_W, stack
+  // Resizing stops at the same size on both sides of the line (panel or chat), so flipping sides never moves the line.
+  const PANEL_MIN_W = 240;                           // narrowest column beside the line (px)
+  const PANEL_MIN_H = 110;                           // shortest row above / below the line (px; also in style.css)
   const SPLIT_DEFAULT = { side: 0.2, stacked: 0.2 }; // the panel's share of the width (beside) / height (above)
   const clampNum = (v, lo, hi) => Math.min(hi, Math.max(lo, Number.isFinite(Number(v)) ? Number(v) : lo));
   let split = Object.assign({}, SPLIT_DEFAULT, store.get('unichat.web.panelSplit', {}));
   let stacked = false;
   try { localStorage.removeItem('unichat.web.panelSize'); } catch { /* older size format, no longer used */ }
-  // The divider's ⇄ button flips the layout in use: side by side the panel moves left of the chat, stacked it moves
-  // below it. Each layout keeps its own choice, saved on this device (not in links), like the divider position.
+  // The ⇄ half of the divider's handle flips the layout in use: side by side the panel moves left of the chat, stacked
+  // it moves below it. Each layout keeps its own choice, saved on this device (not in links), like the divider position.
   const savedFlip = store.get('unichat.web.panelFlip', null) || {};
   const flip = { side: savedFlip.side === true, stacked: savedFlip.stacked === true };
 
@@ -544,9 +546,10 @@
     document.body.classList.toggle('panel-flipped', stacked ? flip.stacked : flip.side);
     const mw = mainEl.clientWidth || w;
     const mh = mainEl.clientHeight || h;
-    const width = Math.round(clampNum(split.side * mw, PANEL_MIN_W, Math.max(PANEL_MIN_W, mw - CHAT_MIN)));
-    // Same limits as the CSS, so --panel-h is the panel's real height (the ⇄ button is placed with it).
-    const height = Math.round(clampNum(split.stacked * mh, PANEL_MIN_H, Math.max(PANEL_MIN_H, Math.min(mh * 0.75, mh - CHAT_MIN_H))));
+    // The line itself is 1px. Same limits as the CSS, so --panel-w / --panel-h are the panel's real size (the handle is
+    // placed with them).
+    const width = Math.round(clampNum(split.side * mw, PANEL_MIN_W, Math.max(PANEL_MIN_W, mw - 1 - PANEL_MIN_W)));
+    const height = Math.round(clampNum(split.stacked * mh, PANEL_MIN_H, Math.max(PANEL_MIN_H, mh - 1 - PANEL_MIN_H)));
     mainEl.style.setProperty('--panel-w', width + 'px');
     mainEl.style.setProperty('--panel-h', height + 'px');
     splitter.setAttribute('aria-orientation', stacked ? 'horizontal' : 'vertical');
@@ -560,44 +563,66 @@
 
   function saveSplit() { store.set('unichat.web.panelSplit', split); }
 
+  // Flipping keeps the dividing line (and the handle under your pointer) where it is: the panel and the chat swap
+  // places, each taking over the other's space.
   splitFlip.addEventListener('click', () => {
-    if (stacked) flip.stacked = !flip.stacked;
-    else flip.side = !flip.side;
+    if (stacked) {
+      const mh = mainEl.clientHeight;
+      if (mh) split.stacked = (mh - 1 - alertsPanel.offsetHeight) / mh;
+      flip.stacked = !flip.stacked;
+    } else {
+      const mw = mainEl.clientWidth;
+      if (mw) split.side = (mw - 1 - alertsPanel.offsetWidth) / mw;
+      flip.side = !flip.side;
+    }
     store.set('unichat.web.panelFlip', flip);
+    saveSplit();
     applyLayout();
   });
 
-  splitter.addEventListener('pointerdown', e => {
+  // Drag the line or the handle's grip. The line moves as far as the pointer does (no jump to the pointer when you
+  // grab the grip beside the line).
+  function startResize(e) {
     if (e.button !== 0) return;
     e.preventDefault();
-    splitter.setPointerCapture(e.pointerId);
+    const el = e.currentTarget;
+    el.setPointerCapture(e.pointerId);
     document.body.classList.add('resizing');
+    const from = stacked ? e.clientY : e.clientX;
+    const size = stacked ? alertsPanel.offsetHeight : alertsPanel.offsetWidth;
+    // Moving the pointer right / down grows a panel on the left / top and shrinks one on the right / bottom.
+    const sign = stacked ? (flip.stacked ? -1 : 1) : (flip.side ? 1 : -1);
     const move = ev => {
       const r = mainEl.getBoundingClientRect();
-      if (stacked) split.stacked = clampNum((flip.stacked ? r.bottom - ev.clientY : ev.clientY - r.top) / r.height, PANEL_MIN_H / r.height, 0.75);
-      else split.side = clampNum((flip.side ? ev.clientX - r.left : r.right - ev.clientX) / r.width, PANEL_MIN_W / r.width, Math.max(PANEL_MIN_W, r.width - CHAT_MIN) / r.width);
+      const px = size + sign * ((stacked ? ev.clientY : ev.clientX) - from);
+      if (stacked) split.stacked = clampNum(px / r.height, PANEL_MIN_H / r.height, Math.max(PANEL_MIN_H, r.height - 1 - PANEL_MIN_H) / r.height);
+      else split.side = clampNum(px / r.width, PANEL_MIN_W / r.width, Math.max(PANEL_MIN_W, r.width - 1 - PANEL_MIN_W) / r.width);
       applyLayout();
     };
     const end = () => {
-      splitter.removeEventListener('pointermove', move);
-      splitter.removeEventListener('pointerup', end);
-      splitter.removeEventListener('pointercancel', end);
+      el.removeEventListener('pointermove', move);
+      el.removeEventListener('pointerup', end);
+      el.removeEventListener('pointercancel', end);
       document.body.classList.remove('resizing');
       saveSplit();
     };
-    splitter.addEventListener('pointermove', move);
-    splitter.addEventListener('pointerup', end);
-    splitter.addEventListener('pointercancel', end);
+    el.addEventListener('pointermove', move);
+    el.addEventListener('pointerup', end);
+    el.addEventListener('pointercancel', end);
+  }
+  const resetSplit = () => { split = Object.assign({}, SPLIT_DEFAULT); saveSplit(); applyLayout(); };
+  [splitter, splitGrip].forEach(el => {
+    el.addEventListener('pointerdown', startResize);
+    el.addEventListener('dblclick', resetSplit);
   });
-  splitter.addEventListener('dblclick', () => { split = Object.assign({}, SPLIT_DEFAULT); saveSplit(); applyLayout(); });
   splitter.addEventListener('keydown', e => {
     const step = (e.shiftKey ? 3 : 1) * 0.02;
     // Start from the panel's actual size (it may be held at its minimum), so every key press visibly changes it.
     const now = stacked ? alertsPanel.offsetHeight / Math.max(1, mainEl.clientHeight) : alertsPanel.offsetWidth / Math.max(1, mainEl.clientWidth);
     // The arrow pointing away from the panel moves the line that way and makes the panel bigger.
     const grow = stacked ? (flip.stacked ? 'ArrowUp' : 'ArrowDown') : (flip.side ? 'ArrowRight' : 'ArrowLeft');
-    if (stacked && (e.key === 'ArrowUp' || e.key === 'ArrowDown')) split.stacked = clampNum(now + (e.key === grow ? step : -step), 0.05, 0.75);
-    else if (!stacked && (e.key === 'ArrowLeft' || e.key === 'ArrowRight')) split.side = clampNum(now + (e.key === grow ? step : -step), 0.05, 0.75);
+    if (stacked && (e.key === 'ArrowUp' || e.key === 'ArrowDown')) split.stacked = clampNum(now + (e.key === grow ? step : -step), 0.05, 0.95);
+    else if (!stacked && (e.key === 'ArrowLeft' || e.key === 'ArrowRight')) split.side = clampNum(now + (e.key === grow ? step : -step), 0.05, 0.95);
     else if (e.key === 'Enter' || e.key === 'Home') split = Object.assign({}, SPLIT_DEFAULT);
     else return;
     e.preventDefault();
