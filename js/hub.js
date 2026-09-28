@@ -68,7 +68,9 @@
     let saved = null;
     try { saved = JSON.parse(sessionStorage.getItem(HISTORY_KEY) || 'null'); } catch { /* blocked or damaged: start empty */ }
     const known = new Set(state.history.map(e => e.id));
-    state.history = events(saved, HISTORY).filter(e => !known.has(e.id)).concat(state.history).slice(-HISTORY);
+    // Connection notes belong to the previous page's connections (a reload drops them all), so they aren't brought back.
+    const connectionNote = e => e.kind === 'system' && (e.code === 'connection-lost' || e.code === 'reconnected');
+    state.history = events(saved, HISTORY).filter(e => !known.has(e.id) && !connectionNote(e)).concat(state.history).slice(-HISTORY);
   }
   function saveHistory() {
     clearTimeout(historyTimer);
@@ -77,6 +79,11 @@
     try { sessionStorage.setItem(HISTORY_KEY, JSON.stringify(state.history)); } catch { /* full or blocked: not fatal */ }
   }
   function saveHistorySoon() { if (keepHistory && !historyTimer) historyTimer = setTimeout(saveHistory, 2000); }
+  // The browser closes every connection as the page is reloaded or closed: that's not a lost connection to announce.
+  let leaving = false;
+  window.addEventListener('beforeunload', () => { leaving = true; setTimeout(() => { leaving = false; }, 3000); }); // still here: it didn't close
+  window.addEventListener('pagehide', () => { leaving = true; });
+  window.addEventListener('pageshow', e => { if (e.persisted) leaving = false; }); // back from the browser's page cache
   window.addEventListener('pagehide', saveHistory);
 
   let panelTimer = null;
@@ -837,7 +844,7 @@
           lastReason = reason;
           lastConfig = config;
 
-          if (!this.announcedDown) {
+          if (!this.announcedDown && !leaving) {
             this.announcedDown = true;
             const lost = { platform: def.platform, kind: 'system', level: config ? 'error' : 'warn', code: 'connection-lost',
               parts: [{ t: 'text', v: this.everHealthy
