@@ -846,7 +846,8 @@
 
   function tipHtml(s) {
     const t = U.statusTone(s);
-    const retry = s.nextRetryAt ? [countdown(s.nextRetryAt, s.state === 'waiting' ? 'checking again' : 'retrying'), s.attempt ? `attempt ${s.attempt}` : ''].filter(Boolean).join(' · ') : '';
+    const retry = s.state === 'stopped' ? `${U.attemptText(s)} · Reconnect is in the banner above the chat`
+      : s.nextRetryAt ? [countdown(s.nextRetryAt, s.state === 'waiting' ? 'checking again' : 'retrying'), U.attemptText(s)].filter(Boolean).join(' · ') : '';
     const off = hidden.has(s.platform);
     const how = lastPointer === 'touch' ? 'Tap again' : 'Click';
     const stream = [
@@ -925,7 +926,7 @@
       const pill = pillFor(s.id) || makePill(s);
       const t = U.statusTone(s);
       const off = hidden.has(s.platform);
-      pill.className = `pill t-${t.tone}${off ? ' hidden-platform' : ''}`;
+      pill.className = `pill t-${t.tone}${s.state === 'stopped' ? ' failed' : ''}${off ? ' hidden-platform' : ''}`;
       // Viewer counts only when Settings → Display → "Show viewer counts" is on.
       const count = showCounts() && Number.isFinite(s.viewers) ? U.fmtCount(s.viewers) : '';
       const countEl = pill.querySelector('.pcount');
@@ -953,27 +954,34 @@
 
   const WARN_ICON = '<svg viewBox="0 0 24 24" fill="currentColor"><path d="M1 21h22L12 2 1 21Zm12-3h-2v-2h2v2Zm0-4h-2v-4h2v4Z"/></svg>';
 
-  // Banners you close stay hidden until that connection recovers and fails again.
+  // Banners you close stay hidden until that connection recovers and fails again. Yellow while it quietly retries; red
+  // (with the "can't reconnect" sound) once it keeps failing; a stopped one has a Reconnect button and can't be closed.
   const dismissed = {};
+  const dismissKey = s => `${Number(s.since) || 0}:${s.alarm === true ? 'red' : ''}`; // turning red shows it again
 
   function renderBanners() {
     const rows = [];
     if (serverDown) {
       rows.push(`<div class="banner err">${WARN_ICON}<span><b>Lost connection to UniChat</b> on ${U.esc(location.host)} <span class="muted">· ${countdown(serverDown.nextRetryAt)} (attempt ${Number(serverDown.attempt) || 0})</span></span></div>`);
     } else {
-      for (const s of statuses.filter(x => x.state === 'reconnecting' || x.state === 'error')) {
-        if (dismissed[s.id] === s.since) continue;
-        const extra = [s.nextRetryAt ? countdown(s.nextRetryAt) : 'retrying now…', s.attempt ? `attempt ${Number(s.attempt) || 0}` : ''].filter(Boolean).join(' · ');
-        rows.push(`<div class="banner ${s.state === 'error' ? 'err' : ''}">${U.icon(s.platform)}<span><b>${U.esc(s.label)}</b>: ${U.esc(s.detail)} <span class="muted">· ${U.esc(extra)}</span></span>` +
-          `<button class="x" type="button" data-dismiss="${U.esc(s.id)}" data-since="${Number(s.since) || 0}" title="Hide until this changes (the status dot keeps showing it)">×</button></div>`);
+      for (const s of statuses.filter(x => x.state === 'reconnecting' || x.state === 'error' || x.state === 'stopped')) {
+        const stopped = s.state === 'stopped';
+        if (!stopped && dismissed[s.id] === dismissKey(s)) continue;
+        const extra = stopped ? U.attemptText(s) : [s.nextRetryAt ? countdown(s.nextRetryAt) : 'retrying now…', U.attemptText(s)].filter(Boolean).join(' · ');
+        const button = stopped
+          ? `<button class="btn small" type="button" data-reconnect="${U.esc(s.id)}">Reconnect</button>`
+          : `<button class="x" type="button" data-dismiss="${U.esc(s.id)}" data-key="${U.esc(dismissKey(s))}" title="Hide until this changes (the status dot keeps showing it)">×</button>`;
+        rows.push(`<div class="banner ${U.statusTone(s).tone === 'problem' ? 'err' : ''}">${U.icon(s.platform)}<span><b>${U.esc(s.label)}</b>: ${U.esc(s.detail)} <span class="muted">· ${U.esc(extra)}</span></span>${button}</div>`);
       }
     }
     bannersEl.innerHTML = rows.join('');
   }
   bannersEl.addEventListener('click', e => {
+    const again = e.target.closest('[data-reconnect]');
+    if (again) { if (conn) conn.send({ type: 'reconnect', id: again.dataset.reconnect }); return; }
     const b = e.target.closest('[data-dismiss]');
     if (!b) return;
-    dismissed[b.dataset.dismiss] = Number(b.dataset.since);
+    dismissed[b.dataset.dismiss] = b.dataset.key;
     renderBanners();
   });
   setInterval(() => {

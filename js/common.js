@@ -321,7 +321,8 @@
 
   // ---------- Connection status: one coloured dot per platform ----------
   // green = connected and you're live · blue = connected, not live · blue ring = connected, the platform doesn't say
-  // whether you're live · yellow = connecting or retrying · red = needs you (or keeps failing) · grey = off.
+  // whether you're live · yellow = connecting or retrying · red = needs you (or still failing after the quiet retries,
+  // see QUIET_TRIES in hub.js) · grey = off.
   const TONE_TEXT = { live: 'Live', ready: 'Connected · not live', unknown: 'Connected', trying: 'Connecting…', problem: 'Needs attention', off: 'Off' };
   const LIVE_UNKNOWN = {
     velora: "Velora doesn't tell guest viewers whether you're live.",
@@ -334,7 +335,8 @@
     let tone, text;
     if (st === 'error') { tone = 'problem'; text = 'Needs attention'; }
     else if (st === 'setup') { tone = 'problem'; text = 'Needs setting up'; }
-    else if (st === 'reconnecting') { tone = (Number(s.attempt) || 0) >= 4 ? 'problem' : 'trying'; text = tone === 'problem' ? "Can't reconnect, still trying" : 'Reconnecting…'; }
+    else if (st === 'stopped') { tone = 'problem'; text = 'Stopped trying to reconnect'; }
+    else if (st === 'reconnecting') { tone = s.alarm === true ? 'problem' : 'trying'; text = tone === 'problem' ? "Can't reconnect, still trying" : 'Reconnecting…'; }
     else if (st === 'connecting') { tone = 'trying'; text = 'Connecting…'; }
     else if (st === 'connected' || st === 'waiting') {
       tone = s.live === true ? 'live' : s.live === false || st === 'waiting' ? 'ready' : 'unknown';
@@ -343,6 +345,15 @@
     else { tone = 'trying'; text = String(st || ''); }
     const note = tone === 'unknown' && own(LIVE_UNKNOWN, s.platform) ? LIVE_UNKNOWN[s.platform] : '';
     return { tone, text, note };
+  }
+
+  /** The reconnect count for a status: "attempt 2 of 3" (quiet tries), "attempt 5 of 9" (after the alarm) or "stopped after 9 tries". */
+  function attemptText(s) {
+    const n = Math.floor(Number(s && s.attempt)) || 0;
+    const of = Math.floor(Number(s && s.attemptOf)) || 0;
+    if (n <= 0) return '';
+    if (s.state === 'stopped') return `stopped after ${n} tries`;
+    return of > 0 ? `attempt ${n} of ${of}` : `attempt ${n}`;
   }
 
   // ---------- Live feed: in the web version everything runs in this browser (see hub.js) ----------
@@ -402,8 +413,12 @@
       levelup: (c, o) => { [392, 523.3, 659.3, 784, 1046.5].forEach((f, i) => tone(c, o, { freq: f, start: i * 0.06, dur: 0.14, type: 'triangle', gain: 0.3 })); },
       whoosh: (c, o) => tone(c, o, { freq: 200, slideTo: 1400, dur: 0.35, type: 'sawtooth', gain: 0.08, attack: 0.1 }),
       error: (c, o) => { tone(c, o, { freq: 440, dur: 0.18, type: 'square', gain: 0.12 }); tone(c, o, { freq: 330, start: 0.2, dur: 0.3, type: 'square', gain: 0.12 }); },
+      failed: (c, o) => {
+        [[493.9, 0], [415.3, 0.19], [349.2, 0.38]].forEach(([f, s]) => tone(c, o, { freq: f, start: s, dur: 0.16, type: 'square', gain: 0.13 }));
+        tone(c, o, { freq: 261.6, start: 0.58, dur: 0.8, type: 'square', gain: 0.13, slideTo: 233.1 });
+      },
     };
-    const BUILTIN_NAMES = { pop: 'Pop', blip: 'Blip', chime: 'Chime', ding: 'Ding', bell: 'Bell', coins: 'Coins', fanfare: 'Fanfare', levelup: 'Level up', whoosh: 'Whoosh', error: 'Alert buzz' };
+    const BUILTIN_NAMES = { pop: 'Pop', blip: 'Blip', chime: 'Chime', ding: 'Ding', bell: 'Bell', coins: 'Coins', fanfare: 'Fanfare', levelup: 'Level up', whoosh: 'Whoosh', error: 'Alert buzz', failed: 'Failed' };
 
     async function play(name, volume) {
       const c = context();
@@ -424,7 +439,10 @@
       if (!settings || e.silent) return;
       const alerts = settings.alerts || {};
       if (e.kind === 'system') {
-        if (e.code === 'connection-lost' && alerts.soundOnConnectionLost) play(alerts.connectionLostSound, alerts.connectionLostVolume);
+        // Only once a platform still can't reconnect after the quiet tries (hub.js): short blips stay silent.
+        if (e.code === 'connection-failing' && alerts.soundOnConnectionLost) play(alerts.connectionLostSound, alerts.connectionLostVolume);
+        // …and once more when it runs out of tries and stops (it needs Reconnect now).
+        if (e.code === 'connection-stopped' && alerts.soundOnConnectionStopped) play(alerts.connectionStoppedSound, alerts.connectionStoppedVolume);
         return;
       }
       cls = cls || classify(e, settings);
@@ -516,6 +534,6 @@
     return { available: !!synth, voices, say, forEvent, stop, speaking };
   })();
 
-  const VERSION = '0.0.12';
-  window.UniChat = { VERSION, api, storePin, fmtMoney, icon, esc, safeUrl, safeColor, renderEvent, connect, Sound, Speech, classify, plainText, NAMES, PLATFORMS, ALERT_KINDS, KIND_LABEL, KIND_EMOJI, fmtTime, nameHtml, avatarHtml, swapAvatar, partsHtml, shownParts, userColor, statusTone, fmtCount, fmtDuration };
+  const VERSION = '0.0.13';
+  window.UniChat = { VERSION, api, storePin, fmtMoney, icon, esc, safeUrl, safeColor, renderEvent, connect, Sound, Speech, classify, plainText, NAMES, PLATFORMS, ALERT_KINDS, KIND_LABEL, KIND_EMOJI, fmtTime, nameHtml, avatarHtml, swapAvatar, partsHtml, shownParts, userColor, statusTone, attemptText, fmtCount, fmtDuration };
 })();

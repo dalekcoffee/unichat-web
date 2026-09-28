@@ -14,7 +14,7 @@
   // "use the default"; each platform's switch in Settings turns it off.
   const DEFAULTS = {
     twitch: { enabled: true, channel: 'dalekcoffee' },
-    tikTok: { enabled: true, username: 'dalekcoffee', eulerKey: '', minGiftCoinsForSound: 0, showLikes: false, showShares: false, showJoins: false,
+    tikTok: { enabled: true, username: 'dalekcoffee', eulerKey: '', minGiftCoinsForSound: 0, showLikes: true, showShares: true, showJoins: true,
       useRelay: false }, // experimental: read TikTok through your own Cloudflare relay (RELAY_URL below) instead of from this browser
     kick: { enabled: true, channel: 'dalekcoffee', chatroomId: 0 }, // chatroomId: only when kick.com blocks the automatic lookup
     velora: { enabled: true, channel: 'dalek' },
@@ -34,6 +34,9 @@
       soundOnConnectionLost: true,
       connectionLostSound: 'builtin:error',
       connectionLostVolume: 0.6,
+      soundOnConnectionStopped: true, // a platform ran out of reconnect tries (needs Reconnect)
+      connectionStoppedSound: 'builtin:failed',
+      connectionStoppedVolume: 0.7,
     },
     filters: {
       hideCommands: true,
@@ -228,6 +231,7 @@
     const validSound = v => v === 'none' || (typeof v === 'string' && /^builtin:[a-z]{1,20}$/.test(v));
     for (const k of KIND_KEYS.map(n => s.alerts.kinds[n])) if (!validSound(k.soundName)) k.soundName = 'builtin:pop';
     if (!validSound(s.alerts.connectionLostSound)) s.alerts.connectionLostSound = 'builtin:error';
+    if (!validSound(s.alerts.connectionStoppedSound)) s.alerts.connectionStoppedSound = 'builtin:failed';
     if (!validSound(s.highlights.soundName)) s.highlights.soundName = 'builtin:ding';
     s.tts.voice = typeof s.tts.voice === 'string' ? s.tts.voice.slice(0, 200) : '';
     return s;

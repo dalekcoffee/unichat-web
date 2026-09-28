@@ -13,7 +13,12 @@
   const HISTORY_KEY = 'unichat.web.history'; // this tab's recent chat (sessionStorage: gone when the tab closes)
   const LEARNING_MS = 6 * 3600 * 1000;
   const BACKOFF = [2, 4, 8, 15, 30, 60];
+  // A dropped connection retries quietly (short blips are normal). After QUIET_TRIES failed tries it turns red and plays
+  // the Settings → Sounds "can't reconnect" sound, tries MORE_TRIES more times, then stops until Reconnect is pressed.
+  const QUIET_TRIES = 3, MORE_TRIES = 6;
+  const CONNECT_TIMEOUT_MS = 45000; // a try that hasn't connected by then counts as failed (timed out)
   const RECONNECT_NOTE_MS = 5000; // "connection lost" + "reconnected" lines leave the chat this long after it's back
+  const CONNECTION_NOTES = ['connection-lost', 'connection-failing', 'connection-stopped', 'reconnected'];
 
   const state = {
     settings: Store.load(),
@@ -69,7 +74,7 @@
     try { saved = JSON.parse(sessionStorage.getItem(HISTORY_KEY) || 'null'); } catch { /* blocked or damaged: start empty */ }
     const known = new Set(state.history.map(e => e.id));
     // Connection notes belong to the previous page's connections (a reload drops them all), so they aren't brought back.
-    const connectionNote = e => e.kind === 'system' && (e.code === 'connection-lost' || e.code === 'reconnected');
+    const connectionNote = e => e.kind === 'system' && CONNECTION_NOTES.includes(e.code);
     state.history = events(saved, HISTORY).filter(e => !known.has(e.id) && !connectionNote(e)).concat(state.history).slice(-HISTORY);
   }
   function saveHistory() {
@@ -673,6 +678,7 @@
     else if (msg.type === 'remove' && Array.isArray(msg.ids)) hub.removeLines(msg.ids.slice(0, 500));
     else if (msg.type === 'clearFeed') clearFeed();
     else if (msg.type === 'recapReset') startRecap(false);
+    else if (msg.type === 'reconnect' && typeof msg.id === 'string') { const c = connectors.find(x => x.def.id === msg.id); if (c) c.restart(); }
   }
 
   // "Clear chat" empties this page's chat (the Alerts panel and recap stay).
@@ -720,14 +726,21 @@
       abort: null,
       live: null,
       announcedDown: false,
-      downNoteId: null,   // the "connection lost" line in the chat, cleared once the connection is back
+      noteIds: [],        // this problem's lines in the chat ("connection lost", …), cleared once the connection is back
       everHealthy: false,
       status: { state: 'disabled', detail: '', attempt: 0, nextRetryAt: null },
 
-      /** The problem is over (reconnected, turned off, or just not live): its note leaves the chat, with any extra note. */
-      problemOver(...extra) {
-        clearNotesSoon([this.downNoteId, ...extra]);
-        this.downNoteId = null;
+      /** A line about this connection's problem in the chat (it leaves once the problem is over). */
+      note(level, code, message) {
+        const e = { platform: def.platform, kind: 'system', level, code, parts: [{ t: 'text', v: `${def.label}: ${message}` }] };
+        hub.publish(e);
+        this.noteIds.push(e.id);
+      },
+
+      /** The problem is over (reconnected, turned off, or just not live): its notes leave the chat. */
+      problemOver() {
+        clearNotesSoon(this.noteIds);
+        this.noteIds = [];
         this.announcedDown = false;
       },
 
@@ -736,7 +749,10 @@
 
       setStatus(stateName, detail, attempt = 0, nextRetryAt = null) {
         this.status = { state: stateName, detail, attempt, nextRetryAt };
+        // alarm: past the quiet tries (red). attemptOf: the try count shown ("attempt 2 of 3", then "attempt 5 of 9").
+        const alarm = attempt > QUIET_TRIES;
         hub.setStatus({ id: def.id, label: def.label, platform: def.platform, state: stateName, detail, attempt, nextRetryAt,
+          alarm, attemptOf: alarm ? QUIET_TRIES + MORE_TRIES : QUIET_TRIES,
           live: this.live, viewers: this.live === false ? null : this.viewers, liveSince: this.live === true ? this.liveSince : null });
       },
 
@@ -763,10 +779,8 @@
 
       healthy(stateName, detail) {
         if (this.announcedDown) {
-          const back = { platform: def.platform, kind: 'system', level: 'ok', code: 'reconnected',
-            parts: [{ t: 'text', v: this.everHealthy ? `${def.label}: reconnected.` : `${def.label}: connected.` }] };
-          hub.publish(back);
-          this.problemOver(back.id);
+          this.note('ok', 'reconnected', this.everHealthy ? 'reconnected.' : 'connected.');
+          this.problemOver();
         }
         this.everHealthy = true;
         this.setStatus(stateName, detail);
@@ -806,23 +820,33 @@
           if (attempt === 0) this.setStatus('connecting', 'Connecting…');
           else this.setStatus(lastConfig ? 'error' : 'reconnecting', lastReason, attempt);
 
+          // Each try stops when the settings change (ac) or when it hasn't connected within CONNECT_TIMEOUT_MS.
           let healthySince = 0;
+          let timedOut = false;
+          const tryAc = new AbortController();
+          ac.signal.addEventListener('abort', () => tryAc.abort(), { once: true });
+          const timeout = setTimeout(() => { if (!healthySince) { timedOut = true; tryAc.abort(); } }, CONNECT_TIMEOUT_MS);
+          // A stopped try can't change the status any more (e.g. an answer arriving just after it timed out).
+          const current = fn => (...args) => { if (!tryAc.signal.aborted) fn(...args); };
           const ctx = {
-            connected: detail => { if (!healthySince) healthySince = now(); this.healthy('connected', detail); },
-            waiting: detail => { if (!healthySince) healthySince = now(); this.healthy('waiting', detail); },
-            setLive: live => this.setLive(live),
-            stats: s => this.stats(s),
+            connected: current(detail => { if (!healthySince) healthySince = now(); this.healthy('connected', detail); }),
+            waiting: current(detail => { if (!healthySince) healthySince = now(); this.healthy('waiting', detail); }),
+            setLive: current(live => this.setLive(live)),
+            stats: current(s => this.stats(s)),
           };
 
           let reason = 'Connection closed';
           let err = null;
           try {
-            await def.run(s, ctx, ac.signal);
+            await def.run(s, ctx, tryAc.signal);
           } catch (e) {
             err = e;
             reason = (e && e.message) || String(e);
+          } finally {
+            clearTimeout(timeout);
           }
           if (ac.signal.aborted) { attempt = 0; continue; } // settings changed or restart requested
+          if (timedOut) { err = null; reason = `No answer within ${CONNECT_TIMEOUT_MS / 1000} seconds`; }
 
           const config = !!(err && err.config);
           if (err && err.waiting) {
@@ -837,21 +861,37 @@
 
           if (healthySince && now() - healthySince > 30000) attempt = 0;
           attempt++;
+          lastReason = reason;
+          lastConfig = config;
+          const tries = QUIET_TRIES + MORE_TRIES;
+          const verb = this.everHealthy ? 'reconnect' : 'connect';
+
+          if (attempt > tries) {
+            // Out of tries: wait for Reconnect (chat page banner), a settings change or the device coming back online.
+            this.setStatus('stopped', reason, tries);
+            if (!leaving) this.note('error', 'connection-stopped', `stopped trying to ${verb} after ${tries} tries (${reason}). Press Reconnect at the top of the chat page to try again.`);
+            await sleep(1e9, ac.signal);
+            attempt = 0;
+            continue;
+          }
+
           const delay = (err && err.retryAfterMs) ||
             (config ? Math.min(60 * attempt, 300) * 1000
               : Math.min(60, BACKOFF[Math.min(attempt - 1, BACKOFF.length - 1)] * (0.85 + Math.random() * 0.3)) * 1000);
           this.setStatus(config ? 'error' : 'reconnecting', reason, attempt, now() + delay);
-          lastReason = reason;
-          lastConfig = config;
 
-          if (!this.announcedDown && !leaving) {
-            this.announcedDown = true;
-            const lost = { platform: def.platform, kind: 'system', level: config ? 'error' : 'warn', code: 'connection-lost',
-              parts: [{ t: 'text', v: this.everHealthy
-                ? `${def.label}: connection lost (${reason}). Reconnecting automatically…`
-                : `${def.label}: can't connect (${reason}). Retrying automatically…` }] };
-            hub.publish(lost);
-            this.downNoteId = lost.id;
+          if (!leaving) {
+            // A quiet line first: short drops are normal and usually fixed by the next try.
+            if (!this.announcedDown) {
+              this.announcedDown = true;
+              this.note(config ? 'error' : 'warn', 'connection-lost', this.everHealthy
+                ? `connection lost (${reason}). Reconnecting automatically…`
+                : `can't connect (${reason}). Retrying automatically…`);
+            }
+            // Still down after the quiet tries: this line plays the "can't reconnect" sound (common.js Sound.forEvent).
+            if (attempt === QUIET_TRIES + 1) {
+              this.note('error', 'connection-failing', `still can't ${verb} after ${QUIET_TRIES} tries (${reason}). Trying ${MORE_TRIES} more times…`);
+            }
           }
           await sleep(delay, ac.signal);
           if (ac.signal.aborted) attempt = 0;

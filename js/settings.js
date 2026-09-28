@@ -479,12 +479,13 @@
         $('#statusRows').innerHTML = list.map(s => {
           const t = U.statusTone(s);
           const extra = [
+            ['reconnecting', 'error', 'stopped'].includes(s.state) ? U.attemptText(s) : '',
             s.live === true && Number.isFinite(s.liveSince) ? `live for ${U.fmtDuration(Date.now() - s.liveSince)}` : '',
             saved.display.showViewerCounts && Number.isFinite(s.viewers) ? `${s.viewers.toLocaleString()} watching` : '',
           ];
           return `<tr>
           <td>${U.icon(s.platform)}</td>
-          <td><span class="pill t-${t.tone}"><span class="dot"></span>${U.esc(t.text)}</span></td>
+          <td><span class="pill t-${t.tone}${s.state === 'stopped' ? ' failed' : ''}"><span class="dot"></span>${U.esc(t.text)}</span></td>
           <td><b>${U.esc(s.label)}</b> <span class="detail">${U.esc([s.detail, ...extra, t.note].filter(Boolean).join(' · '))}</span></td>
         </tr>`;
         }).join('') || '<tr><td class="help">No platforms set up.</td></tr>';

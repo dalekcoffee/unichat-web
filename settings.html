@@ -268,13 +268,22 @@ system=1     show connection messages</span>
       </div>
       <h3>Connection problems</h3>
       <div class="sound-line">
-        <label class="check"><input type="checkbox" data-path="alerts.soundOnConnectionLost"> Play a sound when a platform disconnects</label>
+        <label class="check"><input type="checkbox" data-path="alerts.soundOnConnectionLost"> Play a sound when a platform can't reconnect</label>
         <div class="sr-controls">
-          <select data-path="alerts.connectionLostSound" data-sound-select aria-label="Disconnect sound"></select>
+          <select data-path="alerts.connectionLostSound" data-sound-select aria-label="Can't reconnect sound"></select>
           <span data-volume-control="alerts.connectionLostVolume"></span>
           <span data-test-buttons="alerts.connectionLostSound|alerts.connectionLostVolume"></span>
         </div>
       </div>
+      <div class="sound-line">
+        <label class="check"><input type="checkbox" data-path="alerts.soundOnConnectionStopped"> Play a sound when a platform stops trying</label>
+        <div class="sr-controls">
+          <select data-path="alerts.connectionStoppedSound" data-sound-select aria-label="Stopped trying sound"></select>
+          <span data-volume-control="alerts.connectionStoppedVolume"></span>
+          <span data-test-buttons="alerts.connectionStoppedSound|alerts.connectionStoppedVolume"></span>
+        </div>
+      </div>
+      <p class="help">Short drops reconnect quietly (a yellow banner shows the tries). If a platform still can't reconnect after 3 tries, the banner turns red and the first sound plays. UniChat tries 6 more times; if those fail too, it stops, the second sound plays and that platform's status pill turns red until you press <b>Reconnect</b> on the chat page.</p>
       <h3>Send a test alert</h3>
       <p class="help" style="margin-top:0">Goes to the chat pages open in this browser.</p>
       <div class="row test-row">

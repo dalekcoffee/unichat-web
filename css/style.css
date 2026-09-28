@@ -100,6 +100,11 @@ button, input, select, textarea { font: inherit; color: inherit; }
 .pill.t-live { border-color: color-mix(in srgb, var(--ok) 45%, var(--line)); }
 .pill.t-trying { border-color: color-mix(in srgb, var(--try) 45%, var(--line)); }
 .pill.t-problem { border-color: color-mix(in srgb, var(--err) 60%, var(--line)); }
+/* Stopped trying to reconnect (needs Reconnect): the whole pill turns red. */
+.pill.failed, .pill.failed:focus-visible { background: var(--err); border-color: var(--err); color: #fff; }
+.pill.failed .dot { background: #fff; }
+.pill.failed .pcount { color: #fff; }
+.pill.failed svg { filter: drop-shadow(0 0 1px rgba(0,0,0,.7)); }
 @keyframes on-air { 0% { box-shadow: 0 0 0 0 color-mix(in srgb, var(--ok) 65%, transparent); } 70%, 100% { box-shadow: 0 0 0 5px transparent; } }
 /* A platform whose messages you've hidden: dimmed, with a line through its icon. */
 .pill.hidden-platform { opacity: .5; }
@@ -568,6 +573,12 @@ body.no-avatars .ap-item .avatar { display: none; }
 .legend li { display: flex; align-items: center; gap: 10px; }
 .legend .pill { padding: 5px; cursor: default; }
 .about-card .help { margin-top: 10px; }
+/* Credits: "Made by Dalek with Claude Code", each with its logo */
+.about-card .about-credits { display: flex; align-items: center; flex-wrap: wrap; gap: 6px; margin: 16px 0 0; padding-top: 12px; border-top: 1px solid var(--line); color: var(--text-dim); font-size: 13.5px; }
+.about-credits a, .credit-claude { display: inline-flex; align-items: center; gap: 6px; color: var(--text); font-weight: 600; text-decoration: none; }
+.about-credits a:hover { text-decoration: underline; }
+.about-credits img { width: 22px; height: 22px; object-fit: contain; flex: none; }
+.credit-claude svg { width: 16px; height: 16px; fill: #d97757; flex: none; }
 
 /* ---------- "Turn on sound?" prompt ---------- */
 .sound-layer { z-index: 65; cursor: pointer; }
