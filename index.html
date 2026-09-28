@@ -1,0 +1,119 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#17171f">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' https://static-cdn.jtvnw.net https://tiktokcdn.com https://*.tiktokcdn.com https://tiktokcdn-us.com https://*.tiktokcdn-us.com https://tiktokcdn-eu.com https://*.tiktokcdn-eu.com https://ibyteimg.com https://*.ibyteimg.com https://byteimg.com https://*.byteimg.com https://tiktokv.com https://*.tiktokv.com https://muscdn.com https://*.muscdn.com https://eulerstream.com https://*.eulerstream.com https://kick.com https://*.kick.com https://velora.tv https://*.velora.tv https://blaze.stream https://*.blaze.stream https://nimostatic.tv https://*.nimostatic.tv https://nimo.tv https://*.nimo.tv https://cdn.7tv.app https://cdn.betterttv.net; connect-src 'self' wss://irc-ws.chat.twitch.tv wss://ws.eulerstream.com wss://ws-us2.pusher.com https://kick.com wss://api.velora.tv wss://blaze.stream https://blaze.stream wss://wsapi.nimo.tv wss://wsapi-global.nimo.tv https://api.ivr.fi https://7tv.io https://api.betterttv.net; media-src 'self' data: blob:; font-src 'self'; object-src 'none'; base-uri 'none'; form-action 'none'">
+  <meta name="referrer" content="no-referrer">
+  <title>UniChat</title>
+  <link rel="icon" href="favicon.ico">
+  <link rel="stylesheet" href="css/style.css">
+</head>
+<body class="dashboard">
+  <div class="app">
+    <header class="topbar">
+      <div class="brand"><img src="favicon.ico" alt=""><span>UniChat</span></div>
+      <div class="pills" id="pills" aria-label="Platform connections"></div>
+      <button class="iconbtn" id="clearBtn" type="button" title="Clear the chat on this screen (the Alerts panel keeps everything)">
+        <svg viewBox="0 0 24 24" fill="currentColor"><path d="M15 16h4v2h-4zm0-8h7v2h-7zm0 4h6v2h-6zM3 18c0 1.1.9 2 2 2h6c1.1 0 2-.9 2-2V8H3v10zM14 5h-3l-1-1H6L5 5H2v2h12z"/></svg>
+        <span>Clear</span>
+      </button>
+      <button class="iconbtn hidden" id="stopSpeech" type="button" title="Stop reading aloud">⏹ Stop voice</button>
+      <button class="iconbtn" id="aboutBtn" type="button" title="What is UniChat?" aria-haspopup="dialog" aria-controls="aboutLayer">
+        <svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 2a10 10 0 1 0 0 20 10 10 0 0 0 0-20Zm1 15h-2v-6h2v6Zm0-8h-2V7h2v2Z"/></svg>
+        <span>About</span>
+      </button>
+      <button class="iconbtn" id="soundBtn" type="button" title="Sounds on this device"></button>
+      <button class="iconbtn" id="alertsBtn" type="button" title="Show or hide the alerts panel" aria-controls="alertsPanel">
+        <svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 22a2.5 2.5 0 0 0 2.5-2.5h-5A2.5 2.5 0 0 0 12 22Zm7-6V11a7 7 0 0 0-5.5-6.8V3.5a1.5 1.5 0 0 0-3 0v.7A7 7 0 0 0 5 11v5l-2 2v1h18v-1l-2-2Z"/></svg>
+        <span>Alerts</span><span class="count-badge zero" id="alertCount">0</span>
+      </button>
+      <a class="iconbtn" href="settings.html" data-keep-config title="Settings">
+        <svg viewBox="0 0 24 24" fill="currentColor"><path d="M19.4 13a7.7 7.7 0 0 0 0-2l2.1-1.6-2-3.5-2.5 1a7.5 7.5 0 0 0-1.7-1L15 3.3h-4l-.4 2.6a7.5 7.5 0 0 0-1.7 1l-2.5-1-2 3.5L6.6 11a7.7 7.7 0 0 0 0 2l-2.1 1.6 2 3.5 2.5-1a7.5 7.5 0 0 0 1.7 1l.4 2.6h4l.4-2.6a7.5 7.5 0 0 0 1.7-1l2.5 1 2-3.5ZM13 15.5a3.5 3.5 0 1 1 0-7 3.5 3.5 0 0 1 0 7Z" transform="translate(-1 0)"/></svg>
+      </a>
+    </header>
+    <div class="banners" id="banners"></div>
+    <div class="main" id="main">
+      <main class="feed-wrap">
+        <div class="feed" id="feed">
+          <div class="empty" id="empty">
+            <h2>Waiting for chat…</h2>
+            <p>Messages from Twitch, TikTok, Kick, Velora, Blaze and Nimo TV will appear here.<br>
+              Set your channels in <a href="settings.html" data-keep-config>Settings</a>.</p>
+          </div>
+        </div>
+        <button class="jump hidden" id="jump" type="button">↓ New messages</button>
+      </main>
+      <div class="splitter hidden" id="splitter" role="separator" tabindex="0" aria-label="Resize the alerts panel" aria-valuemin="0" aria-valuemax="100"></div>
+      <aside class="alerts-panel hidden" id="alertsPanel" aria-label="Alerts">
+        <header>
+          <div class="panel-tabs" role="tablist">
+            <button type="button" data-tab="alerts" class="active" title="Alerts"><span class="tab-ico" aria-hidden="true">🔔</span><span class="tab-label">Alerts</span><span class="count-badge zero" data-count="alerts">0</span></button>
+            <button type="button" data-tab="questions" title="Questions"><span class="tab-ico" aria-hidden="true">❓</span><span class="tab-label">Questions</span><span class="count-badge zero" data-count="questions">0</span></button>
+            <button type="button" data-tab="pins" title="Pinned"><span class="tab-ico" aria-hidden="true">📌</span><span class="tab-label">Pinned</span><span class="count-badge zero" data-count="pins">0</span></button>
+            <button type="button" data-tab="recap" title="Stream recap: who to thank"><span class="tab-ico" aria-hidden="true">🏆</span><span class="tab-label">Recap</span></button>
+          </div>
+          <button class="btn small" type="button" id="ackAll" title="Mark everything in this list as done">✓ All</button>
+        </header>
+        <div class="alerts-list" id="alertsList"></div>
+      </aside>
+    </div>
+  </div>
+  <div class="popup-layer" id="popupLayer"><div class="popup" id="popup"></div></div>
+  <div class="modal-layer hidden" id="viewerLayer"><div class="viewer-card" id="viewerCard" role="dialog" aria-label="Viewer card"></div></div>
+  <div class="modal-layer hidden" id="aboutLayer">
+    <div class="viewer-card about-card" role="dialog" aria-modal="true" aria-labelledby="aboutTitle">
+      <div class="about-head">
+        <img src="favicon.ico" alt="">
+        <div><h2 id="aboutTitle">UniChat</h2><span class="about-version" id="aboutVersion"></span></div>
+      </div>
+      <div class="about-plats" id="aboutPlats"></div>
+      <p><b>One window for all your stream chats.</b> UniChat puts Twitch, TikTok, Kick, Velora, Blaze and Nimo TV chat in one place, together with alerts like subs, gifts, tips and raids.</p>
+      <p>It's made mainly for <b>streamers</b> keeping an eye on their own chat, and it's <b>read-only</b>: it never posts anything, never asks you to log in to a platform, and runs entirely in your browser.</p>
+      <ul class="about-list">
+        <li>Twitch, Kick, Velora, Blaze and Nimo TV only need a channel name.</li>
+        <li><b>TikTok needs a free Euler Stream API key</b> (Settings → TikTok), because TikTok doesn't let websites read LIVE chat directly.</li>
+        <li>Your settings and key stay in this browser. The links in Settings open the same setup on any other device.</li>
+        <li>Alerts and questions collect in the Alerts panel; tick them off as you go. Click a name to see that viewer. The 🏆 Recap tab lists everyone to thank at the end of the stream.</li>
+        <li>Settings open in their own tab, so this page stays connected and keeps its chat while you change things.</li>
+      </ul>
+      <h3 class="about-sub">Status dots</h3>
+      <ul class="legend">
+        <li><span class="pill t-live"><span class="dot"></span></span>Connected and you're live</li>
+        <li><span class="pill t-ready"><span class="dot"></span></span>Connected, not live</li>
+        <li><span class="pill t-unknown"><span class="dot"></span></span>Connected; the platform doesn't say if you're live</li>
+        <li><span class="pill t-trying"><span class="dot"></span></span>Connecting or reconnecting</li>
+        <li><span class="pill t-problem"><span class="dot"></span></span>Needs you, or keeps failing to reconnect</li>
+      </ul>
+      <p class="help">Hover a dot for details. Click it to hide or show that platform's messages.</p>
+      <div class="vc-actions">
+        <a class="btn" href="settings.html" data-keep-config>Settings</a>
+        <button class="btn primary" type="button" id="aboutClose">Got it</button>
+      </div>
+    </div>
+  </div>
+  <div class="modal-layer sound-layer hidden" id="soundLayer">
+    <div class="viewer-card sound-card" role="dialog" aria-modal="true" aria-labelledby="soundTitle" aria-describedby="soundText">
+      <div class="sound-ico" aria-hidden="true"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M3 9v6h4l5 5V4L7 9H3Zm13.5 3a4.5 4.5 0 0 0-2.5-4v8a4.5 4.5 0 0 0 2.5-4ZM14 3.2v2.1a7 7 0 0 1 0 13.4v2.1a9 9 0 0 0 0-17.6Z"/></svg></div>
+      <h2 id="soundTitle">Turn on sound?</h2>
+      <p id="soundText">Your browser keeps this page silent until you click it once. Click anywhere to hear alert sounds and text-to-speech.</p>
+      <div class="vc-actions">
+        <button class="btn" type="button" id="soundMute">Keep muted</button>
+        <button class="btn primary" type="button" id="soundEnable">Turn on sound</button>
+      </div>
+    </div>
+  </div>
+  <script src="js/common.js"></script>
+  <script src="js/store.js"></script>
+  <script src="js/hub.js"></script>
+  <script src="js/emotes.js"></script>
+  <script src="js/twitch.js"></script>
+  <script src="js/tiktok.js"></script>
+  <script src="js/kick.js"></script>
+  <script src="js/velora.js"></script>
+  <script src="js/blaze.js"></script>
+  <script src="js/nimo.js"></script>
+  <script src="js/dashboard.js"></script>
+</body>
+</html>

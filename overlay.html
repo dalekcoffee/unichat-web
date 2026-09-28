@@ -1,0 +1,37 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' https://static-cdn.jtvnw.net https://tiktokcdn.com https://*.tiktokcdn.com https://tiktokcdn-us.com https://*.tiktokcdn-us.com https://tiktokcdn-eu.com https://*.tiktokcdn-eu.com https://ibyteimg.com https://*.ibyteimg.com https://byteimg.com https://*.byteimg.com https://tiktokv.com https://*.tiktokv.com https://muscdn.com https://*.muscdn.com https://eulerstream.com https://*.eulerstream.com https://kick.com https://*.kick.com https://velora.tv https://*.velora.tv https://blaze.stream https://*.blaze.stream https://nimostatic.tv https://*.nimostatic.tv https://nimo.tv https://*.nimo.tv https://cdn.7tv.app https://cdn.betterttv.net; connect-src 'self' wss://irc-ws.chat.twitch.tv wss://ws.eulerstream.com wss://ws-us2.pusher.com https://kick.com wss://api.velora.tv wss://blaze.stream https://blaze.stream wss://wsapi.nimo.tv wss://wsapi-global.nimo.tv https://api.ivr.fi https://7tv.io https://api.betterttv.net; media-src 'self' data: blob:; font-src 'self'; object-src 'none'; base-uri 'none'; form-action 'none'">
+  <meta name="referrer" content="no-referrer">
+  <title>UniChat overlay</title>
+  <link rel="stylesheet" href="css/style.css">
+</head>
+<body class="overlay">
+  <!--
+    OBS browser source / website embed. Channels come from the link (?twitch=…&tiktok=…) or this browser's settings.
+    Optional URL parameters:
+      ?fade=30        seconds before a message fades out (0 = never; default comes from Settings)
+      &size=20        font size in px
+      &max=30         messages kept on screen
+      &chat=0         hide normal chat (alerts only)
+      &alerts=0       hide follow/donation/sub/raid alerts
+      &platforms=twitch,kick   only these platforms
+      &sound=1        play alert sounds through OBS (off by default)
+      &ts=1           show timestamps
+      &system=1       show connection messages (off by default so viewers never see them)
+  -->
+  <div class="feed" id="feed"></div>
+  <script src="js/common.js"></script>
+  <script src="js/store.js"></script>
+  <script src="js/hub.js"></script>
+  <script src="js/emotes.js"></script>
+  <script src="js/twitch.js"></script>
+  <script src="js/tiktok.js"></script>
+  <script src="js/kick.js"></script>
+  <script src="js/velora.js"></script>
+  <script src="js/blaze.js"></script>
+  <script src="js/nimo.js"></script>
+  <script src="js/overlay.js"></script>
+</body>
+</html>

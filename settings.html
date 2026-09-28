@@ -1,0 +1,385 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#17171f">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: https://nimostatic.tv https://*.nimostatic.tv https://nimo.tv https://*.nimo.tv; connect-src 'self' wss://wsapi.nimo.tv wss://wsapi-global.nimo.tv; media-src 'self' data: blob:; font-src 'self'; object-src 'none'; base-uri 'none'; form-action 'none'">
+  <meta name="referrer" content="no-referrer">
+  <title>UniChat settings</title>
+  <link rel="icon" href="favicon.ico">
+  <link rel="stylesheet" href="css/style.css">
+</head>
+<body class="settings">
+<header class="s-top">
+  <a class="s-brand" id="brandLink" href="index.html"><img src="favicon.ico" alt=""><span>UniChat</span></a>
+  <span class="s-crumb">Settings</span>
+  <span class="s-version" id="appVersion"></span>
+  <span class="grow"></span>
+  <a class="btn primary s-back" id="backLink" href="index.html"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20 11H7.8l5.6-5.6L12 4l-8 8 8 8 1.4-1.4L7.8 13H20z"/></svg><span>Back to chat</span></a>
+</header>
+
+<div class="s-layout">
+  <nav class="s-nav" id="sNav" aria-label="Settings sections"></nav>
+
+  <main class="s-main">
+    <div class="notice hidden" id="linkNotice"><b>These settings came from the link you opened.</b> Press <b>Save</b> to keep them in this browser too.</div>
+
+    <!-- Links -->
+    <section class="card" id="sec-links" data-nav="Your links" data-ico="link">
+      <header class="card-head">
+        <span class="ico" data-ico="link"></span>
+        <div class="grow"><h2>Your links</h2><p class="sub">Bookmark these. They open UniChat with your channels and options on any device, with nothing to set up there.</p></div>
+      </header>
+      <div class="links">
+        <div class="link-row">
+          <span class="label">Chat</span>
+          <input type="text" readonly id="chatLink" aria-label="Chat link">
+          <div class="link-btns"><button class="btn small" type="button" data-copy="chatLink">Copy</button><a class="btn small" id="chatOpen" href="index.html">Open</a></div>
+        </div>
+        <div class="link-row">
+          <span class="label">Overlay</span>
+          <input type="text" readonly id="overlayLink" aria-label="Overlay link">
+          <div class="link-btns"><button class="btn small" type="button" data-copy="overlayLink">Copy</button><a class="btn small" id="overlayOpen" href="overlay.html" target="_blank" rel="noopener noreferrer">Open</a></div>
+        </div>
+      </div>
+      <label class="check"><input type="checkbox" id="linkIncludesKey"> Include my TikTok (Euler) key in these links</label>
+      <p class="help">Leave this off for links you share or embed on a website: anyone with the key can use your free Euler quota. Turn it on for your own bookmarks on other devices. Everything after the <code>#</code> stays in the browser and is never sent to the website hosting UniChat.</p>
+      <details>
+        <summary>Overlay &amp; embed options</summary>
+        <p class="help">Use the overlay link as an OBS <b>Browser</b> source, or embed it on a website with an <code>&lt;iframe&gt;</code> (without your key). Add options to the link, e.g. <code>&amp;fade=20&amp;size=22&amp;chat=0</code>:</p>
+        <span class="code-block">fade=30      seconds before messages fade (0 = never)
+size=20      font size in px
+max=30       messages kept on screen
+chat=0       alerts only
+alerts=0     chat only
+platforms=twitch   only these platforms
+sound=1      play alert sounds
+ts=1         show timestamps
+system=1     show connection messages</span>
+      </details>
+    </section>
+
+    <!-- Status -->
+    <section class="card" id="sec-status" data-nav="Connections" data-ico="signal">
+      <header class="card-head">
+        <span class="ico" data-ico="signal"></span>
+        <div class="grow"><h2>Connections</h2><p class="sub">Live status from chat pages open in this browser.</p></div>
+      </header>
+      <table class="table status-table"><tbody id="statusRows"><tr><td class="help">Open the chat page in this browser to see live connection status here.</td></tr></tbody></table>
+    </section>
+
+    <!-- Twitch -->
+    <section class="card plat-card-twitch" id="sec-twitch" data-nav="Twitch" data-plat="twitch">
+      <header class="card-head">
+        <span class="ico plat" data-icon="twitch"></span>
+        <div class="grow"><h2>Twitch</h2><p class="sub">Read anonymously, no login needed.</p></div>
+        <label class="switch" title="Turn Twitch on or off"><input type="checkbox" data-path="twitch.enabled" aria-label="Twitch enabled"></label>
+      </header>
+      <div class="card-body">
+        <div class="grid">
+          <label class="field"><span>Channel name</span><input type="text" data-path="twitch.channel" placeholder="yourchannel" autocomplete="off" spellcheck="false"></label>
+        </div>
+        <p class="help">Shows chat, bits, Hype Chats, subs, gift subs, raids and announcements. Follows and channel points need a Twitch login, so they're not included.</p>
+      </div>
+    </section>
+
+    <!-- TikTok -->
+    <section class="card plat-card-tiktok" id="sec-tiktok" data-nav="TikTok" data-plat="tiktok">
+      <header class="card-head">
+        <span class="ico plat" data-icon="tiktok"></span>
+        <div class="grow"><h2>TikTok</h2><p class="sub">Uses Euler Stream's free tier (free forever, no card).</p></div>
+        <label class="switch" title="Turn TikTok on or off"><input type="checkbox" data-path="tikTok.enabled" aria-label="TikTok enabled"></label>
+      </header>
+      <div class="card-body">
+        <div class="grid">
+          <label class="field"><span>TikTok username</span><input type="text" data-path="tikTok.username" placeholder="yourname" autocomplete="off" spellcheck="false"></label>
+          <div class="field">
+            <label for="eulerKey">Euler Stream API key</label>
+            <div class="input-group">
+              <input type="password" id="eulerKey" data-path="tikTok.eulerKey" autocomplete="off" spellcheck="false" placeholder="paste your free key">
+              <button class="btn" type="button" id="toggleKey" aria-controls="eulerKey">Show</button>
+            </div>
+          </div>
+          <label class="field"><span>Only play the gift sound at or above (coins)</span><input type="number" data-path="tikTok.minGiftCoinsForSound" min="0" step="1"></label>
+        </div>
+        <div class="toggles">
+          <label class="check"><input type="checkbox" data-path="tikTok.showJoins"> Show joins (quiet)</label>
+          <label class="check"><input type="checkbox" data-path="tikTok.showLikes"> Show likes (quiet)</label>
+          <label class="check"><input type="checkbox" data-path="tikTok.showShares"> Show shares (quiet)</label>
+        </div>
+        <ol class="steps">
+          <li>Create a free account at <a href="https://www.eulerstream.com/" target="_blank" rel="noopener noreferrer">eulerstream.com</a>.</li>
+          <li>Copy your API key from their dashboard.</li>
+          <li>Paste it above and press <b>Save</b>. It stays in this browser.</li>
+        </ol>
+        <p class="help" id="tiktokCount"></p>
+        <p class="help"><b>Quiet</b> lines show in the chat without a sound, popup or alert. Joins show once per viewer every 10 minutes. Gift combos alert once, when the combo finishes.</p>
+      </div>
+    </section>
+
+    <!-- Kick -->
+    <section class="card plat-card-kick" id="sec-kick" data-nav="Kick" data-plat="kick">
+      <header class="card-head">
+        <span class="ico plat" data-icon="kick"></span>
+        <div class="grow"><h2>Kick</h2><p class="sub">Read from Kick's public chat feed, no login needed.</p></div>
+        <label class="switch" title="Turn Kick on or off"><input type="checkbox" data-path="kick.enabled" aria-label="Kick enabled"></label>
+      </header>
+      <div class="card-body">
+        <div class="grid">
+          <label class="field"><span>Channel name</span><input type="text" data-path="kick.channel" placeholder="yourchannel" autocomplete="off" spellcheck="false"></label>
+        </div>
+        <p class="help">Shows chat, subs, gifted subs and KICKs, plus follows when Kick includes the follower's name.</p>
+        <details>
+          <summary>Advanced: chatroom ID</summary>
+          <p class="help">UniChat finds your chatroom on kick.com by itself. Only if Kick blocks that (the status says so), open <code>kick.com/api/v2/channels/yourchannel</code> in your browser, find <code>"chatroom":{"id":</code> and enter the number after it here. Leave it at 0 otherwise.</p>
+          <div class="grid" style="margin-top:10px">
+            <label class="field"><span>Chatroom ID <em>0 = find it automatically</em></span><input type="number" data-path="kick.chatroomId" min="0" step="1"></label>
+          </div>
+        </details>
+      </div>
+    </section>
+
+    <!-- Velora -->
+    <section class="card plat-card-velora" id="sec-velora" data-nav="Velora" data-plat="velora">
+      <header class="card-head">
+        <span class="ico plat" data-icon="velora"></span>
+        <div class="grow"><h2>Velora</h2><p class="sub">Read as a guest, no login needed.</p></div>
+        <label class="switch" title="Turn Velora on or off"><input type="checkbox" data-path="velora.enabled" aria-label="Velora enabled"></label>
+      </header>
+      <div class="card-body">
+        <div class="grid">
+          <label class="field"><span>Channel name</span><input type="text" data-path="velora.channel" placeholder="yourchannel" autocomplete="off" spellcheck="false"></label>
+        </div>
+        <p class="help">Shows chat, replies, raids and channel-point redemptions. Follows, subs and Volts are only sent to apps you log in to, so they're not included, and emotes show as their <code>:names:</code>.</p>
+      </div>
+    </section>
+
+    <!-- Blaze -->
+    <section class="card plat-card-blaze" id="sec-blaze" data-nav="Blaze" data-plat="blaze">
+      <header class="card-head">
+        <span class="ico plat" data-icon="blaze"></span>
+        <div class="grow"><h2>Blaze</h2><p class="sub">Read as a guest, no login needed.</p></div>
+        <label class="switch" title="Turn Blaze on or off"><input type="checkbox" data-path="blaze.enabled" aria-label="Blaze enabled"></label>
+      </header>
+      <div class="card-body">
+        <div class="grid">
+          <label class="field"><span>Channel name</span><input type="text" data-path="blaze.channel" placeholder="yourchannel" autocomplete="off" spellcheck="false"></label>
+        </div>
+        <p class="help">Shows chat with emotes, tips, subs and gifted subs. Raids you send show as a note in chat.</p>
+      </div>
+    </section>
+
+    <!-- Nimo TV -->
+    <section class="card plat-card-nimo" id="sec-nimo" data-nav="Nimo TV" data-plat="nimo">
+      <header class="card-head">
+        <span class="ico plat" data-icon="nimo"></span>
+        <div class="grow"><h2>Nimo TV</h2><p class="sub">Read as a guest, no login needed.</p></div>
+        <label class="switch" title="Turn Nimo TV on or off"><input type="checkbox" data-path="nimo.enabled" aria-label="Nimo TV enabled"></label>
+      </header>
+      <div class="card-body">
+        <div class="grid">
+          <div class="field">
+            <label for="nimoChannel">Streamer name or room number</label>
+            <div class="input-btn">
+              <input type="text" id="nimoChannel" data-path="nimo.channel" placeholder="YourName or 123456789" autocomplete="off" spellcheck="false">
+              <button class="btn small" type="button" id="nimoFind">Find</button>
+            </div>
+            <input type="number" data-path="nimo.roomId" hidden>
+          </div>
+        </div>
+        <div id="nimoPick" aria-live="polite"></div>
+        <p class="help">Nimo names aren't unique, so type your name and click <b>Find</b>, then pick your channel from Nimo's results. A name with more than one match won't connect until you pick one.</p>
+        <p class="help">Shows chat, paid chat, gifts, follows and subs. Gifts bought with diamonds are alerts; free coin gifts are a quiet line in chat.</p>
+      </div>
+    </section>
+
+    <!-- Filters & highlights -->
+    <section class="card" id="sec-filters" data-nav="Filters" data-ico="filter">
+      <header class="card-head">
+        <span class="ico" data-ico="filter"></span>
+        <div class="grow"><h2>Filters &amp; highlights</h2><p class="sub">Hide the noise and make important messages stand out.</p></div>
+      </header>
+      <div class="toggles">
+        <label class="check"><input type="checkbox" data-path="filters.hideCommands"> Hide !commands</label>
+        <label class="check"><input type="checkbox" data-path="filters.hideBots"> Hide bot accounts</label>
+      </div>
+      <div class="grid">
+        <label class="field"><span>Bot accounts <em>one per line</em></span><textarea rows="5" data-path="filters.botNames" data-type="list" spellcheck="false"></textarea></label>
+        <label class="field"><span>Always hide these users</span><textarea rows="5" data-path="filters.blockedUsers" data-type="list" spellcheck="false" placeholder="username"></textarea></label>
+        <label class="field"><span>Hide messages containing</span><textarea rows="5" data-path="filters.blockedWords" data-type="list" spellcheck="false" placeholder="word or phrase"></textarea></label>
+      </div>
+      <h3>Highlights</h3>
+      <div class="toggles">
+        <label class="check"><input type="checkbox" data-path="highlights.enabled"> Highlight important messages</label>
+        <label class="check"><input type="checkbox" data-path="highlights.mentions"> Messages mentioning your channel names</label>
+        <label class="check"><input type="checkbox" data-path="highlights.firstTimeChatters"> First-time chatters</label>
+      </div>
+      <div class="grid">
+        <label class="field"><span>Extra keywords <em>one per line</em></span><textarea rows="3" data-path="highlights.keywords" data-type="list" placeholder="question&#10;giveaway"></textarea></label>
+      </div>
+      <div class="sound-line">
+        <label class="check"><input type="checkbox" data-path="highlights.sound"> Play a sound for highlighted messages</label>
+        <div class="sr-controls">
+          <select data-path="highlights.soundName" data-sound-select aria-label="Highlight sound"></select>
+          <span data-volume-control="highlights.volume"></span>
+          <span data-test-buttons="highlights.soundName|highlights.volume"></span>
+        </div>
+      </div>
+      <p class="help">Twitch marks true first-time chatters. On the other platforms, this browser learns your regulars and starts marking first-timers after its first 6 hours of watching.</p>
+    </section>
+
+    <!-- Popups & voice -->
+    <section class="card" id="sec-popups" data-nav="Popups & voice" data-ico="megaphone">
+      <header class="card-head">
+        <span class="ico" data-ico="megaphone"></span>
+        <div class="grow"><h2>Big popups &amp; text-to-speech</h2><p class="sub">Make big moments impossible to miss.</p></div>
+      </header>
+      <label class="check"><input type="checkbox" data-path="popup.enabled"> Show a big popup on the chat screen for:</label>
+      <div class="chip-checks" id="popupKinds"></div>
+      <div class="grid">
+        <label class="field"><span>Popup stays for (seconds)</span><input type="number" data-path="popup.seconds" min="2" max="60" step="1"></label>
+      </div>
+      <h3>Text-to-speech</h3>
+      <label class="check"><input type="checkbox" data-path="tts.enabled"> Read messages aloud for:</label>
+      <div class="chip-checks" id="ttsKinds"></div>
+      <div class="grid">
+        <label class="field"><span>Voice (from this device)</span><select data-path="tts.voice" id="ttsVoice"></select></label>
+        <label class="field"><span>Speed <output data-rate-for="tts.rate"></output></span><input type="range" min="0.5" max="2" step="0.1" data-path="tts.rate"></label>
+        <label class="field"><span>Volume <output data-pct-for="tts.volume"></output></span><input type="range" min="0" max="1" step="0.05" data-path="tts.volume"></label>
+        <label class="field"><span>Max characters read</span><input type="number" data-path="tts.maxChars" min="20" max="500" step="10"></label>
+      </div>
+      <div class="row">
+        <label class="check"><input type="checkbox" data-path="tts.readNames"> Say who sent it first</label>
+        <span class="grow"></span>
+        <button class="btn small" type="button" id="testTts">▶ Test voice</button>
+      </div>
+    </section>
+
+    <!-- Sounds -->
+    <section class="card" id="sec-sounds" data-nav="Sounds" data-ico="speaker">
+      <header class="card-head">
+        <span class="ico" data-ico="speaker"></span>
+        <div class="grow"><h2>Sounds &amp; alerts</h2><p class="sub"><b>▶ Test</b> plays a sound here at the volume shown. Sounds play on whichever screen shows the chat (click once on the chat page to allow sound).</p></div>
+      </header>
+      <div class="sound-rows" id="soundRows"></div>
+      <div class="grid">
+        <label class="field"><span>Minimum seconds between chat sounds</span><input type="number" data-path="alerts.chatSoundCooldownSec" min="0" max="60" step="0.5"></label>
+      </div>
+      <h3>Connection problems</h3>
+      <div class="sound-line">
+        <label class="check"><input type="checkbox" data-path="alerts.soundOnConnectionLost"> Play a sound when a platform disconnects</label>
+        <div class="sr-controls">
+          <select data-path="alerts.connectionLostSound" data-sound-select aria-label="Disconnect sound"></select>
+          <span data-volume-control="alerts.connectionLostVolume"></span>
+          <span data-test-buttons="alerts.connectionLostSound|alerts.connectionLostVolume"></span>
+        </div>
+      </div>
+      <h3>Send a test alert</h3>
+      <p class="help" style="margin-top:0">Goes to the chat pages open in this browser.</p>
+      <div class="row test-row">
+        <select id="testPlatform" aria-label="Test platform"><option value="twitch">Twitch</option><option value="tiktok">TikTok</option><option value="kick">Kick</option><option value="velora">Velora</option><option value="blaze">Blaze</option><option value="nimo">Nimo TV</option></select>
+        <button class="btn small" type="button" data-test="chat">💬 Chat</button>
+        <button class="btn small" type="button" data-test="follow">💙 Follow</button>
+        <button class="btn small" type="button" data-test="donation">💰 Donation</button>
+        <button class="btn small" type="button" data-test="sub">⭐ Sub</button>
+        <button class="btn small" type="button" data-test="raid">🚀 Raid</button>
+      </div>
+    </section>
+
+    <!-- Display -->
+    <section class="card" id="sec-display" data-nav="Display" data-ico="display">
+      <header class="card-head">
+        <span class="ico" data-ico="display"></span>
+        <div class="grow"><h2>Display &amp; layout</h2><p class="sub">How chat looks on the chat page and overlay.</p></div>
+      </header>
+      <div class="field size-field">
+        <span>Text size</span>
+        <div class="size-ctl">
+          <div class="size-track">
+            <input type="range" id="fontSizeRange" min="10" max="40" step="1" list="fontPresets" aria-label="Text size">
+            <div class="size-presets" id="sizePresets"></div>
+          </div>
+          <input type="number" id="fontSizeNum" data-path="display.fontSize" min="10" max="48" step="1" aria-label="Text size in pixels">
+        </div>
+        <datalist id="fontPresets"></datalist>
+        <div class="size-preview" id="sizePreview"><b>NightOwl</b>: this is how chat will look 👋</div>
+      </div>
+      <div class="grid">
+        <label class="field"><span>Theme</span><select data-path="display.theme"><option value="dark">Dark</option><option value="light">Light</option></select></label>
+        <label class="field"><span>Alerts panel position</span>
+          <select data-path="display.panelLayout">
+            <option value="auto">Automatic</option>
+            <option value="side">Right of the chat</option>
+            <option value="stacked">Above the chat</option>
+          </select>
+        </label>
+        <label class="field"><span>Clear thanked &amp; answered after <em>seconds · 0 = keep</em></span><input type="number" data-path="display.removeDoneAfterSec" min="0" max="3600" step="1"></label>
+        <label class="field"><span>Messages kept on screen</span><input type="number" data-path="display.maxMessages" min="50" max="2000" step="50"></label>
+        <label class="field"><span>Overlay fade-out <em>seconds · 0 = never</em></span><input type="number" data-path="display.overlayFadeSec" min="0" max="3600" step="1"></label>
+      </div>
+      <div class="toggles two">
+        <label class="check"><input type="checkbox" data-path="display.showTimestamps"> Show timestamps</label>
+        <label class="check"><input type="checkbox" data-path="display.showPlatformIcons"> Show platform icons</label>
+        <label class="check"><input type="checkbox" data-path="display.showBadges"> Show badges (mod, sub, VIP…)</label>
+        <label class="check"><input type="checkbox" data-path="display.showAvatars"> Show profile pictures</label>
+        <label class="check"><input type="checkbox" data-path="display.platformColors"> Colour stripe per platform</label>
+        <label class="check"><input type="checkbox" data-path="display.alertsInChat"> Show alerts in the chat too (they're always in the Alerts panel)</label>
+        <label class="check"><input type="checkbox" data-path="display.keepAwake"> Keep this screen awake while the chat is open (handy for a phone or tablet chat monitor)</label>
+        <label class="check"><input type="checkbox" data-path="display.showViewerCounts"> Show viewer counts next to each platform (off: viewer counts are never shown)</label>
+        <label class="check"><input type="checkbox" data-path="display.thirdPartyEmotes"> 7TV, BetterTTV and FrankerFaceZ emotes, in chat from every platform</label>
+      </div>
+      <p class="help"><b>Automatic</b> puts the Alerts panel to the right of the chat, and above it on narrow or portrait screens (phones, vertical monitors). It starts at 20% of the space. On the chat page, drag the line between the chat and the panel to resize it; double-click it to reset.</p>
+      <p class="help">Ticking <b>✓</b> on an alert or question fades it out of the panel after the time above (it stays in the chat). Click the tick again before then to undo.</p>
+      <p class="help"><b>7TV, BetterTTV and FrankerFaceZ</b>: their global emotes plus the ones set up for your Twitch channel (above), turned into pictures when anyone on any platform types them. The emote lists come from <code>7tv.io</code> and <code>api.betterttv.net</code> (FrankerFaceZ through BetterTTV), with no login.</p>
+      <p class="help">TikTok, Velora, Blaze and Nimo TV send profile pictures with chat. Twitch and Kick don't, so UniChat looks them up by username (Twitch with <a href="https://api.ivr.fi/v2/docs" target="_blank" rel="noopener noreferrer">IVR</a>, a free public Twitch API; Kick on kick.com) and remembers them in this browser for a week. Turn profile pictures off to stop these lookups.</p>
+    </section>
+
+    <!-- Experimental -->
+    <section class="card" id="sec-experimental" data-nav="Experimental" data-ico="flask">
+      <header class="card-head">
+        <span class="ico" data-ico="flask"></span>
+        <div class="grow"><h2>Experimental</h2><p class="sub">Features still being tried out. Leave them off and everything works as before.</p></div>
+      </header>
+      <label class="check"><input type="checkbox" data-path="tikTok.useRelay" id="useRelay"> Use my Cloudflare relay (worker) for TikTok</label>
+      <p class="help" id="relayNote"></p>
+      <p class="help">The relay keeps the Euler key on Cloudflare and shares <b>one</b> Euler connection between all your screens and your website, so this browser doesn't need the key and your free Euler quota lasts longer. Turn it off to go back to connecting straight to Euler.</p>
+    </section>
+
+    <!-- Backup -->
+    <section class="card" id="sec-backup" data-nav="Backup" data-ico="backup">
+      <header class="card-head">
+        <span class="ico" data-ico="backup"></span>
+        <div class="grow"><h2>Backup</h2><p class="sub">Save your settings to a file, or load them on another browser.</p></div>
+      </header>
+      <div class="row">
+        <button class="btn" type="button" id="exportBtn">⬇ Download settings file</button>
+        <label class="btn file-btn">⬆ Load settings file…<input type="file" id="importFile" accept=".json,application/json" hidden></label>
+      </div>
+      <label class="check"><input type="checkbox" id="exportIncludesKey"> Include my TikTok (Euler) key in the file</label>
+      <p class="help" id="exportHelp">Keep a file that includes your key private. Loading a file without a key keeps the key already saved in this browser.</p>
+    </section>
+
+    <!-- Diagnostics -->
+    <section class="card" id="sec-diag" data-nav="Diagnostics" data-ico="bug">
+      <header class="card-head">
+        <span class="ico" data-ico="bug"></span>
+        <div class="grow"><h2>Diagnostics</h2><p class="sub">Connection notes and any unrecognised TikTok, Kick, Velora, Blaze or Nimo TV events from chat pages in this browser.</p></div>
+      </header>
+      <pre class="code-block logs" id="logs">Nothing yet. Open the chat page in this browser.</pre>
+    </section>
+  </main>
+</div>
+
+<div class="savebar" id="savebar" role="region" aria-label="Unsaved changes">
+  <span class="sb-text"><span class="sb-dot"></span>Unsaved changes</span>
+  <button class="btn" type="button" id="revert">Discard</button>
+  <button class="btn primary" type="button" id="save">Save<kbd>Ctrl S</kbd></button>
+</div>
+
+<script src="js/common.js"></script>
+<script src="js/store.js"></script>
+<script src="js/nimo.js"></script>
+<script src="js/settings.js"></script>
+</body>
+</html>
