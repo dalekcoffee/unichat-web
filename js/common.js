@@ -457,7 +457,7 @@
       pop: (c, o) => tone(c, o, { freq: 520, slideTo: 880, dur: 0.09, gain: 0.6 }),
       blip: (c, o) => { tone(c, o, { freq: 1200, dur: 0.06, type: 'triangle', gain: 0.4 }); tone(c, o, { freq: 1600, start: 0.07, dur: 0.06, type: 'triangle', gain: 0.3 }); },
       // Softer than the others (the follow sound): two gentle, overlapping tones with a slow start, no click.
-      chime: (c, o) => { tone(c, o, { freq: 880, dur: 0.5, gain: 0.24, attack: 0.02 }); tone(c, o, { freq: 1318.5, start: 0.12, dur: 0.7, gain: 0.2, attack: 0.02 }); },
+      chime: (c, o) => { tone(c, o, { freq: 880, dur: 0.5, gain: 0.204, attack: 0.02 }); tone(c, o, { freq: 1318.5, start: 0.12, dur: 0.7, gain: 0.17, attack: 0.02 }); },
       ding: (c, o) => { tone(c, o, { freq: 1568, dur: 1.0, gain: 0.45 }); tone(c, o, { freq: 3136, dur: 0.5, gain: 0.08 }); },
       bell: (c, o) => { [523.3, 1046.5, 1568, 2093].forEach((f, i) => tone(c, o, { freq: f, dur: 1.4 - i * 0.25, gain: 0.35 / (i + 1) })); },
       coins: (c, o) => { [987.8, 1318.5, 1975.5, 2637].forEach((f, i) => tone(c, o, { freq: f, start: i * 0.07, dur: 0.18, type: 'square', gain: 0.12 })); },
@@ -701,6 +701,6 @@
     return { available: !!synth || typeof Worker === 'function', voices, say, forEvent, prepare, willRead: (e, settings, cls) => !!lineFor(e, settings, cls), warmUp, stop, speaking, KOKORO };
   })();
 
-  const VERSION = '0.0.23';
+  const VERSION = '0.0.24';
   window.UniChat = { VERSION, api, storePin, fmtMoney, icon, esc, safeUrl, safeColor, renderEvent, connect, Sound, Speech, classify, nameHasSlur, plainText, NAMES, PLATFORMS, ALERT_KINDS, KIND_LABEL, KIND_EMOJI, fmtTime, nameHtml, avatarHtml, swapAvatar, partsHtml, shownParts, userColor, statusTone, attemptText, fmtCount, fmtDuration };
 })();
