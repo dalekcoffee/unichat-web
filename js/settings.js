@@ -190,10 +190,10 @@
     const sel = $('#ttsVoice');
     const current = sel.value || (saved.tts && saved.tts.voice) || '';
     const voices = U.Speech.voices();
-    const cloud = Object.entries(U.Speech.CLOUD).map(([k, label]) => `<option value="se:${k}">${U.esc(label)}</option>`).join('');
-    sel.innerHTML = `<optgroup label="Stream voices (StreamElements)">${cloud}</optgroup><optgroup label="This device"><option value="">Default device voice</option>` +
+    const own = Object.entries(U.Speech.KOKORO).map(([k, label]) => `<option value="kokoro:${k}">${U.esc(label)}${k === 'af_heart' ? ' (default)' : ''}</option>`).join('');
+    sel.innerHTML = `<optgroup label="UniChat voices">${own}</optgroup><optgroup label="This device"><option value="">Default device voice</option>` +
       voices.map(v => `<option value="${U.esc(v.name)}">${U.esc(v.name)}${v.lang ? ` (${U.esc(v.lang)})` : ''}</option>`).join('') + '</optgroup>';
-    if (current && !current.startsWith('se:') && !voices.some(v => v.name === current)) {
+    if (current && !current.startsWith('kokoro:') && !voices.some(v => v.name === current)) {
       sel.insertAdjacentHTML('beforeend', `<option value="${U.esc(current)}">${U.esc(current)} (not on this device)</option>`);
     }
     sel.value = current;

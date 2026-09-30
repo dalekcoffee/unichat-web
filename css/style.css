@@ -1037,3 +1037,7 @@ body.settings.basic #sNav [hidden] { display: none; }
 .ag-name { font-size: 14px; font-weight: 600; }
 .ag-cell input { width: 20px; height: 20px; accent-color: var(--accent); cursor: pointer; }
 @media (max-width: 420px) { .s-mode { padding: 0 10px; font-size: 13px; } .ag-row { grid-template-columns: minmax(96px, 1.3fr) repeat(3, 1fr); padding: 6px; } }
+
+/* An alert waiting for its spoken line (UniChat voice): shown in the panel until sound, popup and voice go together. */
+.ap-item .voice-wait { display: none; }
+.ap-item.voicing .voice-wait { display: inline-flex; align-items: center; gap: 4px; color: var(--accent); font-weight: 600; animation: pulse 1.2s infinite; }

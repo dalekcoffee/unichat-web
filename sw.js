@@ -29,6 +29,7 @@ self.addEventListener('fetch', event => {
   if (req.method !== 'GET') return;
   const url = new URL(req.url);
   if (url.origin !== self.location.origin) return; // other sites (chat servers, pictures, APIs) are left alone
+  if (url.pathname.includes('/vendor/kokoro/model/')) return; // the voice model (~90 MB) is kept by the voice itself, not copied again here
   event.respondWith(fromNetwork(req, url));
 });
 

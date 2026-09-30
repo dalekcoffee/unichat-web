@@ -13,7 +13,7 @@
   // This copy of UniChat opens on DalekCoffee's channels, so a new browser only needs the Euler key. A blank name means
   // "use the default"; each platform's switch in Settings turns it off.
   const DEFAULTS = {
-    settingsVersion: 4, // bumped when a default changes in a way saved settings should follow (see migrate)
+    settingsVersion: 6, // bumped when a default changes in a way saved settings should follow (see migrate)
     twitch: { enabled: true, channel: 'dalekcoffee',
       catchUp: true }, // after a reconnect, fill in chat missed meanwhile (from recent-messages.robotty.de, see twitch.js)
     tikTok: { enabled: true, username: 'dalekcoffee', eulerKey: '', minGiftCoinsForSound: 0, showLikes: true, showShares: true, showJoins: true,
@@ -27,22 +27,22 @@
     nimo: { enabled: true, channel: 'dalekcoffee', roomId: 1592342521 },
     alerts: {
       kinds: {
-        chat: kind(true, 'builtin:pop', 0.8),
-        follow: kind(true, 'builtin:chime', 0.7),
-        donation: kind(true, 'builtin:coins', 0.8),
-        sub: kind(true, 'builtin:fanfare', 0.8),
-        raid: kind(true, 'builtin:fanfare', 0.8),
+        chat: kind(true, 'builtin:pop', 0.5),
+        follow: kind(true, 'builtin:chime', 0.5),
+        donation: kind(true, 'builtin:coins', 0.5),
+        sub: kind(true, 'builtin:fanfare', 0.5),
+        raid: kind(true, 'builtin:fanfare', 0.5),
       },
       chatSoundCooldownSec: 2,
       soundOnConnectionLost: true,
       connectionLostSound: 'builtin:error',
-      connectionLostVolume: 0.6,
+      connectionLostVolume: 0.5,
       soundOnConnectionStopped: true, // a platform ran out of reconnect tries (needs Reconnect)
       connectionStoppedSound: 'builtin:failed',
-      connectionStoppedVolume: 0.7,
+      connectionStoppedVolume: 0.5,
       // The first chat message after chat has been quiet for afterSec: vibrate the phone (where the browser can) and/or
       // play this sound instead of the usual chat sound, so it's harder to miss. Later messages are normal again.
-      quietChat: { afterSec: 30, vibrate: true, sound: true, soundName: 'builtin:bell', volume: 0.6 },
+      quietChat: { afterSec: 30, vibrate: true, sound: true, soundName: 'builtin:bell', volume: 0.5 },
     },
     filters: {
       hideCommands: true,
@@ -53,12 +53,12 @@
       blockedUsers: [],
       blockedWords: [],
     },
-    highlights: { enabled: true, mentions: true, keywords: [], firstTimeChatters: true, sound: true, soundName: 'builtin:ding', volume: 0.6 },
+    highlights: { enabled: true, mentions: true, keywords: [], firstTimeChatters: true, sound: true, soundName: 'builtin:ding', volume: 0.5 },
     popup: { enabled: true, seconds: 6, kinds: { follow: false, donation: true, sub: true, raid: true } },
     // Stream preview button (chat page top bar): your stream in a popup, from Beam's player (beamstream.gg/<beam>/embed).
     // Loaded only while the popup is open. TikTok LIVE can't be shown inside other sites, so Beam is the one player.
     preview: { enabled: true, beam: 'dalek' },
-    tts: { enabled: false, kinds: { follow: false, donation: true, sub: false, raid: false }, readNames: true, voice: 'se:Justin', rate: 1, volume: 0.9, maxChars: 200 },
+    tts: { enabled: false, kinds: { follow: false, donation: true, sub: false, raid: false }, readNames: true, voice: 'kokoro:af_heart', rate: 1, volume: 0.9, maxChars: 200 },
     display: {
       fontSize: 16, showTimestamps: true, showAvatars: true, showPlatformIcons: true, showBadges: true,
       maxMessages: 300, theme: 'dark', overlayFadeSec: 30, alertsInChat: false, platformColors: true,
@@ -197,6 +197,17 @@
     if ((Number(s.settingsVersion) || 1) < 3 && isObj(s.display) && s.display.alertsInChat === true) s.display.alertsInChat = false;
     // v4 (0.0.17): alerts are read by Justin (StreamElements) unless another voice was picked.
     if ((Number(s.settingsVersion) || 1) < 4 && isObj(s.tts) && (s.tts.voice === '' || s.tts.voice === undefined)) s.tts.voice = 'se:Justin';
+    // v5 (0.0.18): alert sounds got a louder base, so their default volumes moved to 50% (and the voice got quieter).
+    if ((Number(s.settingsVersion) || 1) < 5 && isObj(s.alerts)) {
+      const OLD = { chat: 0.8, follow: 0.7, donation: 0.8, sub: 0.8, raid: 0.8 };
+      for (const [k, v] of Object.entries(OLD)) { const x = isObj(s.alerts.kinds) && s.alerts.kinds[k]; if (isObj(x) && x.volume === v) x.volume = 0.5; }
+      if (s.alerts.connectionLostVolume === 0.6) s.alerts.connectionLostVolume = 0.5;
+      if (s.alerts.connectionStoppedVolume === 0.7) s.alerts.connectionStoppedVolume = 0.5;
+      if (isObj(s.alerts.quietChat) && s.alerts.quietChat.volume === 0.6) s.alerts.quietChat.volume = 0.5;
+    }
+    if ((Number(s.settingsVersion) || 1) < 5 && isObj(s.highlights) && s.highlights.volume === 0.6) s.highlights.volume = 0.5;
+    // v6 (0.0.18): UniChat's own voice (Kokoro Heart) replaces the StreamElements voices, which now need a key.
+    if ((Number(s.settingsVersion) || 1) < 6 && isObj(s.tts) && (s.tts.voice === '' || s.tts.voice === undefined || /^se:/.test(String(s.tts.voice)))) s.tts.voice = 'kokoro:af_heart';
     return s;
   }
 

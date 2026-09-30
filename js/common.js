@@ -427,12 +427,27 @@
     };
     const BUILTIN_NAMES = { pop: 'Pop', blip: 'Blip', chime: 'Chime', ding: 'Ding', bell: 'Bell', coins: 'Coins', fanfare: 'Fanfare', levelup: 'Level up', whoosh: 'Whoosh', error: 'Alert buzz', failed: 'Failed', sparkle: 'Sparkle' };
 
+    const SOUND_BOOST = 2.2;
+    let limiterNode = null;
+    function limiter(c) {
+      if (limiterNode) return limiterNode;
+      limiterNode = c.createDynamicsCompressor();
+      limiterNode.threshold.value = -6;
+      limiterNode.knee.value = 6;
+      limiterNode.ratio.value = 12;
+      limiterNode.attack.value = 0.003;
+      limiterNode.release.value = 0.15;
+      limiterNode.connect(c.destination);
+      return limiterNode;
+    }
+
     async function play(name, volume) {
       const c = context();
       if (!c || c.state !== 'running' || !name || name === 'none') return;
       const out = c.createGain();
-      out.gain.value = Math.max(0, Math.min(1, volume == null ? 0.7 : volume));
-      out.connect(c.destination);
+      // The built-in sounds are soft, so every volume gets a boost; a limiter keeps loud ones from distorting.
+      out.gain.value = Math.max(0, Math.min(1, volume == null ? 0.5 : volume)) * SOUND_BOOST;
+      out.connect(limiter(c));
 
       if (name.startsWith('builtin:')) {
         const fn = BUILTIN[name.slice(8)] || BUILTIN.pop;
@@ -490,6 +505,9 @@
   // ---------- Text-to-speech (browser's built-in voices) ----------
   const Speech = (function () {
     const synth = window.speechSynthesis;
+    // Voices are much louder than the alert sounds, so 100% on the voice slider is only this share of full volume.
+    const VOICE_BASE = 0.35;
+    const voiceVolume = tts => Math.max(0, Math.min(1, tts.volume == null ? 0.9 : tts.volume)) * VOICE_BASE;
     let queued = 0;
 
     function voices() { return synth ? synth.getVoices() : []; }
@@ -511,38 +529,76 @@
       return `${intro} ${msg}`.trim();
     }
 
-    // Cloud voices: "se:<Name>" plays StreamElements' voice (e.g. Justin, the classic stream TTS voice) as an audio file
-    // from api.streamelements.com, so the alert's words are sent there. If it doesn't play, this device's voice speaks.
-    const CLOUD = { Justin: 'Justin (StreamElements)', Brian: 'Brian (StreamElements)', Joey: 'Joey (StreamElements)', Matthew: 'Matthew (StreamElements)', Salli: 'Salli (StreamElements)', Amy: 'Amy (StreamElements)' };
-    const cloudName = v => (typeof v === 'string' && v.startsWith('se:') && own(CLOUD, v.slice(3)) ? v.slice(3) : '');
-    const cloudQueue = [];
-    let cloudAudio = null;
-    function playNextCloud() {
-      if (cloudAudio || !cloudQueue.length) return;
-      const { text, tts, name } = cloudQueue.shift();
-      const a = new Audio();
-      cloudAudio = a;
-      a.referrerPolicy = 'no-referrer';
-      a.volume = Math.max(0, Math.min(1, tts.volume == null ? 0.9 : tts.volume));
-      a.playbackRate = Math.max(0.5, Math.min(2, tts.rate || 1));
-      let spoken = false;
-      const done = () => { if (cloudAudio !== a) return; cloudAudio = null; queued = Math.max(0, queued - 1); playNextCloud(); };
-      const fallback = () => { if (spoken || cloudAudio !== a) return; spoken = true; cloudAudio = null; queued = Math.max(0, queued - 1); speakLocal(text, tts); playNextCloud(); };
-      a.onplaying = () => { spoken = true; };
-      a.onended = done;
-      a.onerror = fallback;
-      a.src = `https://api.streamelements.com/kappa/v2/speech?voice=${encodeURIComponent(name)}&text=${encodeURIComponent(text.slice(0, 500))}`;
-      a.play().catch(fallback);
+    // UniChat's own voices: Kokoro (open-source, Apache-2.0) runs in a background worker on this device (js/voice-worker.js),
+    // with its files hosted on this site. "kokoro:<id>" in Settings picks one. It never falls back to the device's voices:
+    // an alert waits for its line instead (see prepare), and says nothing if the voice can't be made.
+    const scriptSrc = document.currentScript ? document.currentScript.src : location.href; // js/common.js: the worker sits beside it
+    const KOKORO = { af_heart: 'Heart', af_kore: 'Kore', af_bella: 'Bella', af_sky: 'Sky' };
+    const kokoroId = v => (typeof v === 'string' && v.startsWith('kokoro:') && own(KOKORO, v.slice(7)) ? v.slice(7) : '');
+    let worker = null, ready = false, nextId = 0;
+    const jobs = new Map(); // id → { parts: [], last, resolve, reject, settled }
+    function voiceWorker() {
+      if (worker) return worker;
+      if (typeof Worker !== 'function') return null;
+      try { worker = new Worker(new URL('voice-worker.js', scriptSrc).href, { type: 'module' }); }
+      catch { return null; }
+      worker.onmessage = ev => {
+        const m = ev.data || {};
+        if (m.type === 'ready') { ready = true; return; }
+        const job = jobs.get(m.id);
+        if (!job) return;
+        if (m.type === 'audio') {
+          job.parts.push(URL.createObjectURL(new Blob([m.wav], { type: 'audio/wav' })));
+          if (m.last) job.last = true;
+          if (!job.settled) { job.settled = true; job.resolve(); } // the first sentence is enough to start
+          if (job.onPart) job.onPart();
+        } else if (m.type === 'error') {
+          jobs.delete(m.id);
+          if (!job.settled) { job.settled = true; job.reject(new Error(m.message || 'voice failed')); }
+        }
+      };
+      worker.onerror = () => { for (const [id, job] of jobs) { jobs.delete(id); if (!job.settled) { job.settled = true; job.reject(new Error('voice unavailable')); } } worker = null; ready = false; };
+      return worker;
+    }
+    /** Starts loading the voice (about 90 MB, once; the browser keeps it) so the first alert doesn't wait for it. */
+    function warmUp(tts) { if (tts && kokoroId(tts.voice)) { const w = voiceWorker(); if (w) w.postMessage({ type: 'load' }); } }
+
+    const playing = [];     // ready lines waiting their turn
+    let current = null;     // the Audio playing now
+    function playNext() {
+      if (current || !playing.length) return;
+      const { job, tts } = playing[0];
+      if (!job.parts.length) { if (job.last || !jobs.has(job.id)) { playing.shift(); playNext(); } else job.onPart = playNext; return; }
+      const url = job.parts.shift();
+      const a = new Audio(url);
+      current = a;
+      a.volume = voiceVolume(tts);
+      const next = () => { URL.revokeObjectURL(url); if (current === a) current = null; if (job.last && !job.parts.length) { jobs.delete(job.id); playing.shift(); } playNext(); };
+      a.onended = next;
+      a.onerror = next;
+      a.play().catch(next);
+    }
+
+    /** Makes a line in a UniChat voice. Resolves with play() once its first sentence is ready; rejects if it can't. */
+    function makeLine(text, tts) {
+      const w = voiceWorker();
+      if (!w) return Promise.reject(new Error('voice unavailable'));
+      const id = ++nextId;
+      const job = { id, parts: [], last: false, settled: false };
+      const readyP = new Promise((resolve, reject) => { job.resolve = resolve; job.reject = reject; });
+      jobs.set(id, job);
+      w.postMessage({ type: 'speak', id, text, voice: kokoroId(tts.voice), speed: tts.rate || 1 });
+      return readyP.then(() => ({ play() { playing.push({ job, tts }); playNext(); } }));
     }
 
     function speakLocal(text, tts) {
       if (!synth || !text) return;
-      if (queued >= 6) return;
+      if (queued >= 6) return; // don't build a backlog during a flood of alerts
       const u = new SpeechSynthesisUtterance(text);
       const v = tts.voice && voices().find(x => x.name === tts.voice);
       if (v) u.voice = v;
       u.rate = tts.rate || 1;
-      u.volume = tts.volume == null ? 0.9 : tts.volume;
+      u.volume = voiceVolume(tts);
       queued++;
       u.onend = u.onerror = () => { queued = Math.max(0, queued - 1); };
       synth.speak(u);
@@ -550,48 +606,47 @@
 
     function say(text, tts) {
       if (!text) return;
-      const name = cloudName(tts.voice);
-      if (name) {
-        if (queued >= 6) return;
-        queued++;
-        cloudQueue.push({ text, tts, name });
-        playNextCloud();
-        return;
-      }
-      if (!synth) return;
-      if (queued >= 6) return; // don't build a backlog during a flood of alerts
-      const u = new SpeechSynthesisUtterance(text);
-      const v = tts.voice && voices().find(x => x.name === tts.voice);
-      if (v) u.voice = v;
-      u.rate = tts.rate || 1;
-      u.volume = tts.volume == null ? 0.9 : tts.volume;
-      queued++;
-      u.onend = u.onerror = () => { queued = Math.max(0, queued - 1); };
-      synth.speak(u);
+      if (kokoroId(tts.voice)) { makeLine(text, tts).then(line => line.play(), () => {}); return; }
+      speakLocal(text, tts);
     }
 
-    /** Speak an alert if text-to-speech is on for its kind. Waits a moment so the alert sound plays first. */
-    function forEvent(e, settings, cls) {
+    /** What an alert would say, or '' when it isn't read aloud (voice off, kind off, hidden). */
+    function lineFor(e, settings, cls) {
       const tts = settings && settings.tts;
-      if (!tts || !tts.enabled || e.silent || !(tts.kinds && tts.kinds[e.kind])) return;
+      if (!tts || !tts.enabled || e.silent || !(tts.kinds && tts.kinds[e.kind])) return '';
       cls = cls || classify(e, settings);
-      if (cls.hidden) return;
-      const text = textFor(e, tts, cls);
-      if (!text) return;
-      setTimeout(() => say(text, tts), 900);
+      if (cls.hidden) return '';
+      // UniChat's voices take a while on phones, so they read only the short part (who and what), not the message.
+      return kokoroId(tts.voice) ? textFor(e, Object.assign({}, tts, { readNames: true }), { maskText: true }) : textFor(e, tts, cls);
+    }
+
+    /**
+     * For an alert in a UniChat voice: a promise of its line (resolves with { play }) or null when it isn't read aloud
+     * or uses a device voice. The chat page holds the alert until it's ready.
+     */
+    function prepare(e, settings, cls) {
+      const text = lineFor(e, settings, cls);
+      return text && kokoroId(settings.tts.voice) ? makeLine(text, settings.tts) : null;
+    }
+
+    /** Speak an alert with a device voice if text-to-speech is on for its kind. Waits a moment so the alert sound plays first. */
+    function forEvent(e, settings, cls) {
+      const text = lineFor(e, settings, cls);
+      if (!text || kokoroId(settings.tts.voice)) return;
+      setTimeout(() => speakLocal(text, settings.tts), 900);
     }
 
     function stop() {
-      cloudQueue.length = 0;
-      if (cloudAudio) { const a = cloudAudio; cloudAudio = null; a.pause(); a.removeAttribute('src'); }
+      playing.length = 0;
+      if (current) { const a = current; current = null; a.pause(); }
       if (synth) synth.cancel();
       queued = 0;
     }
-    function speaking() { return !!cloudAudio || (!!synth && (synth.speaking || synth.pending)); }
+    function speaking() { return !!current || (!!synth && (synth.speaking || synth.pending)); }
 
-    return { available: !!synth || typeof Audio === 'function', voices, say, forEvent, stop, speaking, CLOUD };
+    return { available: !!synth || typeof Worker === 'function', voices, say, forEvent, prepare, warmUp, stop, speaking, KOKORO };
   })();
 
-  const VERSION = '0.0.17';
+  const VERSION = '0.0.18';
   window.UniChat = { VERSION, api, storePin, fmtMoney, icon, esc, safeUrl, safeColor, renderEvent, connect, Sound, Speech, classify, plainText, NAMES, PLATFORMS, ALERT_KINDS, KIND_LABEL, KIND_EMOJI, fmtTime, nameHtml, avatarHtml, swapAvatar, partsHtml, shownParts, userColor, statusTone, attemptText, fmtCount, fmtDuration };
 })();

@@ -101,6 +101,7 @@
     applyLayout();
     updateWakeLock();
     renderPreviewBtn();
+    if (s.tts && s.tts.enabled) U.Speech.warmUp(s.tts); // loads the voice now, not at the first alert
   }
 
   // ---------- Feed ----------
@@ -140,10 +141,34 @@
 
     // Chat filled in after a reconnect (missed while away) is old news: no sounds, popups, voice or nudge.
     if (!live || cls.hidden || e.missed) return;
+    // An alert read aloud in a UniChat voice waits until its line is ready, then sound, popup and voice come together.
+    const line = soundOn && U.Sound.unlocked() && isAlert(e) ? U.Speech.prepare(e, settings, cls) : null;
+    if (line) { holdForVoice(e, cls, line); return; }
     const nudged = quietChatNudge(e, cls);
     if (soundOn && !nudged) U.Sound.forEvent(e, settings, cls);
     maybePopup(e);
     if (soundOn && U.Sound.unlocked()) U.Speech.forEvent(e, settings, cls);
+  }
+
+  // ---------- Alerts waiting for their voice line ----------
+  // Making a line takes a few seconds (longer on phones). Meanwhile the alert shows in the Alerts panel as "Processing
+  // voice…"; if the line fails or takes over 2 minutes, the alert goes ahead without it (never with a device voice).
+  const voicePending = new Set();
+  function holdForVoice(e, cls, line) {
+    voicePending.add(e.id);
+    panelEls(e.id).forEach(el => el.classList.add('voicing'));
+    let done = false;
+    const go = player => {
+      if (done) return;
+      done = true;
+      voicePending.delete(e.id);
+      panelEls(e.id).forEach(el => el.classList.remove('voicing'));
+      if (soundOn) U.Sound.forEvent(e, settings, cls);
+      maybePopup(e);
+      if (player && soundOn) setTimeout(() => player.play(), 900); // after the alert sound
+    };
+    const giveUp = setTimeout(() => go(null), 120000);
+    line.then(p => { clearTimeout(giveUp); go(p); }, () => { clearTimeout(giveUp); go(null); });
   }
 
   // ---------- Nudge for the first chat message after a quiet spell ----------
@@ -457,7 +482,7 @@
   function panelItem(e, tab) {
     const el = document.createElement('div');
     const kind = isAlert(e) ? e.kind : 'chat';
-    el.className = `ap-item k-${kind}`;
+    el.className = `ap-item k-${kind}${voicePending.has(e.id) ? ' voicing' : ''}`;
     el.dataset.id = e.id;
     const label = isAlert(e) ? `${U.KIND_EMOJI[e.kind] || ''} ${U.esc(U.KIND_LABEL[e.kind] || e.kind)}` : (tab === 'questions' ? '❓ Question' : '💬 Chat');
     const body = U.partsHtml(U.shownParts(e, U.classify(e, settings)));
@@ -466,7 +491,7 @@
       : `<button class="ap-check" type="button">${TICK_ICON}</button>`;
     el.innerHTML =
       `<div class="body">
-        <div class="meta">${U.icon(e.platform)}<span>${label}</span><span>${U.fmtTime(e.ts)}</span>${e.code === 'test' ? '<span class="chip">TEST</span>' : ''}${e.amount ? `<span class="amount">${U.esc(e.amount)}</span>` : ''}</div>
+        <div class="meta">${U.icon(e.platform)}<span>${label}</span><span class="voice-wait">🔊 Processing voice…</span><span>${U.fmtTime(e.ts)}</span>${e.code === 'test' ? '<span class="chip">TEST</span>' : ''}${e.amount ? `<span class="amount">${U.esc(e.amount)}</span>` : ''}</div>
         <div>${U.nameHtml(e.user, theme, e.kind === 'hype' ? null : e.platform)} ${U.esc(e.title || '')}</div>${body ? `<div class="msgtext">${body}</div>` : ''}
       </div>${action}`;
     if (tab !== 'pins') paintDone(el, tab);
