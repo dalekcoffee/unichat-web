@@ -85,6 +85,7 @@
     document.body.classList.toggle('no-badges', !d.showBadges);
     document.body.classList.toggle('no-avatars', !d.showAvatars);
     document.body.classList.toggle('no-platform-colors', d.platformColors === false);
+    U.Sound.setMaster(s.alerts && s.alerts.masterVolume); // for ?sound=1
   }
 
   // OBS allows audio without a click, but try anyway in case it's opened in a normal browser.

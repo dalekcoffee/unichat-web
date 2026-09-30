@@ -83,11 +83,11 @@ system=1     show connection messages</span>
       </div>
       <div class="alert-grid" id="alertGrid"></div>
       <div class="grid">
-        <label class="field"><span>Volume <em>every sound and the voice</em> <output id="allVolumePct"></output></span><input type="range" min="0" max="1" step="0.05" id="allVolume"></label>
+        <label class="field"><span>Volume <em>every sound and the voice</em> <output data-pct-for="alerts.masterVolume"></output></span><input type="range" min="0" max="1" step="0.05" data-path="alerts.masterVolume"></label>
         <label class="field"><span>Voice volume <output data-pct-for="tts.volume"></output></span><input type="range" min="0" max="1" step="0.05" data-path="tts.volume"></label>
         <label class="field"><span>Voice</span><select data-path="tts.voice" id="ttsVoice"></select></label>
       </div>
-      <p class="help keep">Tick what each kind does. At the same volume, every sound and the voice are equally loud. <b>Show all settings</b> (top) has each sound's own volume, sound choices, per-platform sounds, filters and more.</p>
+      <p class="help keep">Tick what each kind does. <b>Volume</b> turns every sound and the voice up or down together; <b>Voice volume</b> is the voice on its own. <b>Show all settings</b> (top) has each sound's own volume, sound choices, per-platform sounds, filters and more.</p>
     </section>
 
 

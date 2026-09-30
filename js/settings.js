@@ -161,22 +161,8 @@
     GRID.map(([k, l]) => `<div class="ag-row"><span class="ag-name">${l}</span>${tick(`alerts.kinds.${k}.sound`, `${l}: sound`)}${k === 'chat' ? '<span></span><span></span>'
       : tick(`popup.kinds.${k}`, `${l}: big popup`) + tick(`tts.kinds.${k}`, `${l}: read aloud`)}</div>`).join('');
 
-  // One slider for every sound's volume and the voice's (each keeps its own volume in "Show all settings"). They're all
-  // equally loud at the same volume, so one value here means one loudness.
-  const allVolume = $('#allVolume');
-  const ALL_VOLUMES = KINDS.map(([k]) => `alerts.kinds.${k}.volume`).concat(['highlights.volume', 'alerts.quietChat.volume',
-    'alerts.connectionLostVolume', 'alerts.connectionStoppedVolume', 'tts.volume']);
-  const allVolumeInputs = () => ALL_VOLUMES.map(p => $(`[data-path="${p}"]`)).filter(Boolean);
-  function showAllVolume() {
-    const v = allVolumeInputs().map(i => Number(i.value));
-    const avg = v.length ? v.reduce((a, b) => a + b, 0) / v.length : 0.5;
-    allVolume.value = avg;
-    $('#allVolumePct').textContent = (v.every(x => x === v[0]) ? '' : '~') + Math.round(avg * 100) + '%';
-  }
-  allVolume.addEventListener('input', () => {
-    allVolumeInputs().forEach(i => { i.value = allVolume.value; });
-    changed();
-  });
+  // The overall Volume (every sound and the voice, on top of their own volumes) also applies to the tests on this page.
+  const useMasterVolume = () => U.Sound.setMaster(Number($('[data-path="alerts.masterVolume"]').value));
 
   // Basic settings by default; "Show all settings" (remembered on this device) shows every option.
   const modeBtn = $('#modeBtn');
@@ -238,7 +224,7 @@
       else el.value = v == null ? '' : v;
     });
     updatePercents();
-    showAllVolume();
+    useMasterVolume();
     showSize(saved.display.fontSize || 16);
     applyTheme(saved.display.theme);
     markPlatformCards();
@@ -265,7 +251,7 @@
 
   function changed() {
     updatePercents();
-    showAllVolume();
+    useMasterVolume();
     markPlatformCards();
     applyTheme($('[data-path="display.theme"]').value); // preview here; Save applies it everywhere
     updateLinks();

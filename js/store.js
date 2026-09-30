@@ -26,6 +26,9 @@
     // (Nimo names aren't unique); it's only used while it belongs to that name. 0 = none picked.
     nimo: { enabled: true, channel: 'dalekcoffee', roomId: 1592342521 },
     alerts: {
+      // Settings → Alerts & voice → Volume: turns every sound and the voice up or down together, on top of each one's own
+      // volume (1 = as set). Separate from the voice's own volume (tts.volume).
+      masterVolume: 1,
       kinds: {
         chat: kind(true, 'builtin:pop', 0.5),
         follow: kind(true, 'builtin:chime', 0.5),
@@ -172,6 +175,7 @@
     s.alerts.chatSoundCooldownSec = clamp(s.alerts.chatSoundCooldownSec, 0, 60, 2);
     s.alerts.quietChat.afterSec = Math.round(clamp(s.alerts.quietChat.afterSec, 5, 3600, 30));
     s.alerts.quietChat.volume = clamp(s.alerts.quietChat.volume, 0, 1, 0.6);
+    s.alerts.masterVolume = clamp(s.alerts.masterVolume, 0, 1, 1);
     s.tikTok.joinsClearSec = Math.round(clamp(s.tikTok.joinsClearSec, 0, 3600, 5));
     for (const k of KIND_KEYS.map(n => s.alerts.kinds[n])) {
       k.volume = clamp(k.volume, 0, 1, 0.7);

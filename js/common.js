@@ -489,6 +489,10 @@
     // seems to the ear (short-term loudness, Glasberg & Moore): a sound-level meter rates pure tones like the chime too
     // low and buzzy ones like the coins too high. The chime sits where it sounded right; the rest match it.
     const LEVEL = { pop: 0.29, blip: 0.382, chime: 1.176, ding: 0.313, bell: 0.163, coins: 0.73, fanfare: 0.314, levelup: 0.567, whoosh: 0.967, error: 0.581, failed: 0.407, sparkle: 0.328 };
+    // Settings → Alerts & voice → Volume: every sound and the voice together, on top of each one's own volume.
+    let master = 1;
+    function setMaster(v) { const n = Number(v); master = Number.isFinite(n) ? Math.max(0, Math.min(1, n)) : 1; }
+    function masterVolume() { return master; }
     let limiterNode = null;
     function limiter(c) {
       if (limiterNode) return limiterNode;
@@ -508,7 +512,7 @@
       const key = own(BUILTIN, name.slice(8)) ? name.slice(8) : 'pop';
       const out = c.createGain();
       // The built-in sounds are soft, so every volume gets a boost; a limiter keeps loud ones from distorting.
-      out.gain.value = Math.max(0, Math.min(1, volume == null ? 0.5 : volume)) * SOUND_BOOST * LEVEL[key];
+      out.gain.value = Math.max(0, Math.min(1, volume == null ? 0.5 : volume)) * master * SOUND_BOOST * LEVEL[key];
       out.connect(limiter(c));
       BUILTIN[key](c, out);
     }
@@ -550,7 +554,7 @@
 
     function forget(file) { buffers.delete(file); }
 
-    return { unlock, unlocked, supported, onState, play, forEvent, forget, BUILTIN_NAMES };
+    return { unlock, unlocked, supported, onState, play, forEvent, forget, setMaster, masterVolume, BUILTIN_NAMES };
   })();
 
   // ---------- Local actions (no server in the web version; see hub.js) ----------
@@ -564,10 +568,10 @@
     const synth = window.speechSynthesis;
     // 100% on the voice slider is this share of full volume: as loud as any alert sound at 100% (measured the same way,
     // see Sound's LEVEL). UniChat's voices are levelled first (js/voice-worker.js); Kore still comes out quieter than
-    // the others, so each voice has its own trim.
+    // the others, so each voice has its own trim. The overall Volume (Sound.masterVolume) applies on top.
     const VOICE_BASE = 0.38;
     const VOICE_TRIM = { af_heart: 1, af_kore: 1.51, af_bella: 1.03, af_sky: 1.06 };
-    const voiceVolume = tts => Math.min(1, Math.max(0, Math.min(1, tts.volume == null ? 0.9 : tts.volume)) * VOICE_BASE * (VOICE_TRIM[kokoroId(tts.voice)] || 1));
+    const voiceVolume = tts => Math.min(1, Math.max(0, Math.min(1, tts.volume == null ? 0.9 : tts.volume)) * VOICE_BASE * (VOICE_TRIM[kokoroId(tts.voice)] || 1) * Sound.masterVolume());
     let queued = 0;
 
     function voices() { return synth ? synth.getVoices() : []; }
@@ -706,6 +710,6 @@
     return { available: !!synth || typeof Worker === 'function', voices, say, forEvent, prepare, willRead: (e, settings, cls) => !!lineFor(e, settings, cls), warmUp, stop, speaking, KOKORO };
   })();
 
-  const VERSION = '0.0.26';
+  const VERSION = '0.0.27';
   window.UniChat = { VERSION, api, storePin, fmtMoney, icon, esc, safeUrl, safeColor, renderEvent, connect, Sound, Speech, classify, nameHasSlur, plainText, NAMES, PLATFORMS, ALERT_KINDS, KIND_LABEL, KIND_EMOJI, fmtTime, nameHtml, avatarHtml, swapAvatar, partsHtml, shownParts, userColor, statusTone, attemptText, fmtCount, fmtDuration };
 })();

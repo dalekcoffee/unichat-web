@@ -101,6 +101,7 @@
     applyLayout();
     updateWakeLock();
     renderPreviewBtn();
+    U.Sound.setMaster(s.alerts && s.alerts.masterVolume); // every sound and the voice
     if (s.tts && s.tts.enabled) U.Speech.warmUp(s.tts); // loads the voice now, not at the first alert
   }
 
