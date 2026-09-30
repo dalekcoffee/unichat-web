@@ -90,9 +90,10 @@
   function spy() {
     spyQueued = false;
     const offset = parseFloat(getComputedStyle(sections[0]).scrollMarginTop) || 80;
-    let current = sections[0];
-    for (const sec of sections) if (sec.getBoundingClientRect().top - offset <= 8) current = sec;
-    if (window.innerHeight + window.scrollY >= document.documentElement.scrollHeight - 4) current = sections[sections.length - 1];
+    const shown = sections.filter(sec => sec.offsetParent !== null);
+    let current = shown[0] || sections[0];
+    for (const sec of shown) if (sec.getBoundingClientRect().top - offset <= 8) current = sec;
+    if (shown.length && window.innerHeight + window.scrollY >= document.documentElement.scrollHeight - 4) current = shown[shown.length - 1];
     $$('#sNav [data-jump]').forEach(b => {
       const on = b.dataset.jump === current.id;
       if (on && !b.classList.contains('active') && nav.scrollWidth > nav.clientWidth + 2) {
@@ -123,7 +124,7 @@
     const base = `alerts.kinds.${kind}`;
     const plats = ['twitch', 'tiktok', 'kick', 'velora', 'blaze', 'nimo'].map(p => `<label title="${U.NAMES[p]}">${U.icon(p)}<input type="checkbox" data-path="${base}.platforms.${p}"></label>`).join('');
     return `<div class="sound-row">
-      <div class="sr-label"><label class="check"><input type="checkbox" data-path="${base}.sound"> ${label}</label>${hint ? `<div class="help">${hint}</div>` : ''}</div>
+      <div class="sr-label"><b>${label}</b>${hint ? `<div class="help">${hint}</div>` : ''}</div>
       <div class="sr-controls">
         <select data-path="${base}.soundName" data-sound-select></select>
         ${volumeControl(`${base}.volume`)}
@@ -152,18 +153,47 @@
 
   // ---------- popup / TTS kinds ----------
   const chip = (path, label) => `<label class="chip-check"><input type="checkbox" data-path="${path}"><span>${label}</span></label>`;
-  $('#popupKinds').innerHTML = [['follow', '💙 Follows'], ['donation', '💰 Donations'], ['sub', '⭐ Subs'], ['raid', '🚀 Raids']]
-    .map(([k, l]) => chip(`popup.kinds.${k}`, l)).join('');
-  $('#ttsKinds').innerHTML = [['donation', '💰 Donations'], ['sub', '⭐ Subs']]
-    .map(([k, l]) => chip(`tts.kinds.${k}`, l)).join('');
+  // Basic: one row per kind, with what it does (sound, big popup, read aloud). Chat can't pop up or be read aloud.
+  const GRID = [['chat', '💬 Chat'], ['follow', '💙 Follow'], ['donation', '💰 Donation'], ['sub', '⭐ Sub'], ['raid', '🚀 Raid']];
+  const tick = (path, label) => `<label class="ag-cell" title="${label}"><input type="checkbox" data-path="${path}" aria-label="${label}"></label>`;
+  $('#alertGrid').innerHTML = '<div class="ag-row ag-head"><span></span><span>Sound</span><span>Popup</span><span>Read aloud</span></div>' +
+    GRID.map(([k, l]) => `<div class="ag-row"><span class="ag-name">${l}</span>${tick(`alerts.kinds.${k}.sound`, `${l}: sound`)}${k === 'chat' ? '<span></span><span></span>'
+      : tick(`popup.kinds.${k}`, `${l}: big popup`) + tick(`tts.kinds.${k}`, `${l}: read aloud`)}</div>`).join('');
+
+  // One slider for every alert sound's volume (each kind keeps its own volume in "Show all settings").
+  const allVolume = $('#allVolume');
+  const kindVolumes = () => KINDS.map(([k]) => $(`[data-path="alerts.kinds.${k}.volume"]`)).filter(Boolean);
+  function showAllVolume() {
+    const v = kindVolumes().map(i => Number(i.value));
+    const avg = v.length ? v.reduce((a, b) => a + b, 0) / v.length : 0.7;
+    allVolume.value = avg;
+    $('#allVolumePct').textContent = (v.every(x => x === v[0]) ? '' : '~') + Math.round(avg * 100) + '%';
+  }
+  allVolume.addEventListener('input', () => {
+    kindVolumes().forEach(i => { i.value = allVolume.value; });
+    $('#allVolumePct').textContent = Math.round(allVolume.value * 100) + '%';
+    changed();
+  });
+
+  // Basic settings by default; "Show all settings" (remembered on this device) shows every option.
+  const modeBtn = $('#modeBtn');
+  function applyMode(all) {
+    document.body.classList.toggle('basic', !all);
+    modeBtn.textContent = all ? 'Basic settings' : 'Show all settings';
+    modeBtn.setAttribute('aria-pressed', String(all));
+    $$('#sNav [data-jump]').forEach(b => { const sec = document.getElementById(b.dataset.jump); b.hidden = !!sec && sec.classList.contains('adv') && !all; });
+    spy();
+  }
+  modeBtn.addEventListener('click', () => { const all = document.body.classList.contains('basic'); prefs.set('unichat.web.settingsAll', all); applyMode(all); });
 
   function fillVoices() {
     const sel = $('#ttsVoice');
     const current = sel.value || (saved.tts && saved.tts.voice) || '';
     const voices = U.Speech.voices();
-    sel.innerHTML = '<option value="">Default voice</option>' +
-      voices.map(v => `<option value="${U.esc(v.name)}">${U.esc(v.name)}${v.lang ? ` (${U.esc(v.lang)})` : ''}</option>`).join('');
-    if (current && !voices.some(v => v.name === current)) {
+    const cloud = Object.entries(U.Speech.CLOUD).map(([k, label]) => `<option value="se:${k}">${U.esc(label)}</option>`).join('');
+    sel.innerHTML = `<optgroup label="Stream voices (StreamElements)">${cloud}</optgroup><optgroup label="This device"><option value="">Default device voice</option>` +
+      voices.map(v => `<option value="${U.esc(v.name)}">${U.esc(v.name)}${v.lang ? ` (${U.esc(v.lang)})` : ''}</option>`).join('') + '</optgroup>';
+    if (current && !current.startsWith('se:') && !voices.some(v => v.name === current)) {
       sel.insertAdjacentHTML('beforeend', `<option value="${U.esc(current)}">${U.esc(current)} (not on this device)</option>`);
     }
     sel.value = current;
@@ -205,6 +235,7 @@
       else el.value = v == null ? '' : v;
     });
     updatePercents();
+    showAllVolume();
     showSize(saved.display.fontSize || 16);
     applyTheme(saved.display.theme);
     markPlatformCards();
@@ -231,6 +262,7 @@
 
   function changed() {
     updatePercents();
+    showAllVolume();
     markPlatformCards();
     applyTheme($('[data-path="display.theme"]').value); // preview here; Save applies it everywhere
     updateLinks();
@@ -498,5 +530,6 @@
     channel.postMessage({ type: 'hello?' });
   }
 
+  applyMode(prefs.get('unichat.web.settingsAll', false) === true);
   render();
 })();

@@ -1024,3 +1024,16 @@ body.settings .sr-controls select, body.settings .test-row select { width: auto;
 @media (prefers-reduced-motion: reduce) {
   .msg, .popup, .savebar, .dot, .pill .pname, .sound-ico, .clear-btn.armed::after { animation: none !important; transition: none !important; }
 }
+
+/* ---------- Settings: Basic (default) vs "Show all settings" ---------- */
+body.settings.basic .adv, body.settings.basic .card .help:not(.keep), body.settings.basic .steps + .help { display: none !important; }
+body.settings.basic #sNav [hidden] { display: none; }
+.s-mode { height: 36px; }
+.alert-grid { display: grid; gap: 2px; max-width: 520px; }
+.ag-row { display: grid; grid-template-columns: minmax(110px, 1.4fr) repeat(3, minmax(64px, 1fr)); align-items: center; padding: 6px 10px; border-radius: 8px; }
+.ag-row:nth-child(even) { background: color-mix(in srgb, var(--bg-elev-2) 55%, transparent); }
+.ag-head { color: var(--text-dim); font-size: 12px; font-weight: 600; text-transform: uppercase; letter-spacing: .5px; }
+.ag-head span, .ag-cell { text-align: center; justify-self: center; }
+.ag-name { font-size: 14px; font-weight: 600; }
+.ag-cell input { width: 20px; height: 20px; accent-color: var(--accent); cursor: pointer; }
+@media (max-width: 420px) { .s-mode { padding: 0 10px; font-size: 13px; } .ag-row { grid-template-columns: minmax(96px, 1.3fr) repeat(3, 1fr); padding: 6px; } }

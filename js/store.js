@@ -13,7 +13,7 @@
   // This copy of UniChat opens on DalekCoffee's channels, so a new browser only needs the Euler key. A blank name means
   // "use the default"; each platform's switch in Settings turns it off.
   const DEFAULTS = {
-    settingsVersion: 3, // bumped when a default changes in a way saved settings should follow (see migrate)
+    settingsVersion: 4, // bumped when a default changes in a way saved settings should follow (see migrate)
     twitch: { enabled: true, channel: 'dalekcoffee',
       catchUp: true }, // after a reconnect, fill in chat missed meanwhile (from recent-messages.robotty.de, see twitch.js)
     tikTok: { enabled: true, username: 'dalekcoffee', eulerKey: '', minGiftCoinsForSound: 0, showLikes: true, showShares: true, showJoins: true,
@@ -58,7 +58,7 @@
     // Stream preview button (chat page top bar): your stream in a popup, from Beam's player (beamstream.gg/<beam>/embed).
     // Loaded only while the popup is open. TikTok LIVE can't be shown inside other sites, so Beam is the one player.
     preview: { enabled: true, beam: 'dalek' },
-    tts: { enabled: false, kinds: { donation: true, sub: false }, readNames: true, voice: '', rate: 1, volume: 0.9, maxChars: 200 },
+    tts: { enabled: false, kinds: { follow: false, donation: true, sub: false, raid: false }, readNames: true, voice: 'se:Justin', rate: 1, volume: 0.9, maxChars: 200 },
     display: {
       fontSize: 16, showTimestamps: true, showAvatars: true, showPlatformIcons: true, showBadges: true,
       maxMessages: 300, theme: 'dark', overlayFadeSec: 30, alertsInChat: false, platformColors: true,
@@ -195,6 +195,8 @@
     if ((Number(s.settingsVersion) || 1) < 2 && isObj(chat) && chat.volume === 0.45) chat.volume = 0.8;
     // v3 (0.0.16): alerts show in the Alerts panel only, not in the chat too (Settings → Display turns them back on).
     if ((Number(s.settingsVersion) || 1) < 3 && isObj(s.display) && s.display.alertsInChat === true) s.display.alertsInChat = false;
+    // v4 (0.0.17): alerts are read by Justin (StreamElements) unless another voice was picked.
+    if ((Number(s.settingsVersion) || 1) < 4 && isObj(s.tts) && (s.tts.voice === '' || s.tts.voice === undefined)) s.tts.voice = 'se:Justin';
     return s;
   }
 

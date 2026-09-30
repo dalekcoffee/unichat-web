@@ -511,8 +511,54 @@
       return `${intro} ${msg}`.trim();
     }
 
-    function say(text, tts) {
+    // Cloud voices: "se:<Name>" plays StreamElements' voice (e.g. Justin, the classic stream TTS voice) as an audio file
+    // from api.streamelements.com, so the alert's words are sent there. If it doesn't play, this device's voice speaks.
+    const CLOUD = { Justin: 'Justin (StreamElements)', Brian: 'Brian (StreamElements)', Joey: 'Joey (StreamElements)', Matthew: 'Matthew (StreamElements)', Salli: 'Salli (StreamElements)', Amy: 'Amy (StreamElements)' };
+    const cloudName = v => (typeof v === 'string' && v.startsWith('se:') && own(CLOUD, v.slice(3)) ? v.slice(3) : '');
+    const cloudQueue = [];
+    let cloudAudio = null;
+    function playNextCloud() {
+      if (cloudAudio || !cloudQueue.length) return;
+      const { text, tts, name } = cloudQueue.shift();
+      const a = new Audio();
+      cloudAudio = a;
+      a.referrerPolicy = 'no-referrer';
+      a.volume = Math.max(0, Math.min(1, tts.volume == null ? 0.9 : tts.volume));
+      a.playbackRate = Math.max(0.5, Math.min(2, tts.rate || 1));
+      let spoken = false;
+      const done = () => { if (cloudAudio !== a) return; cloudAudio = null; queued = Math.max(0, queued - 1); playNextCloud(); };
+      const fallback = () => { if (spoken || cloudAudio !== a) return; spoken = true; cloudAudio = null; queued = Math.max(0, queued - 1); speakLocal(text, tts); playNextCloud(); };
+      a.onplaying = () => { spoken = true; };
+      a.onended = done;
+      a.onerror = fallback;
+      a.src = `https://api.streamelements.com/kappa/v2/speech?voice=${encodeURIComponent(name)}&text=${encodeURIComponent(text.slice(0, 500))}`;
+      a.play().catch(fallback);
+    }
+
+    function speakLocal(text, tts) {
       if (!synth || !text) return;
+      if (queued >= 6) return;
+      const u = new SpeechSynthesisUtterance(text);
+      const v = tts.voice && voices().find(x => x.name === tts.voice);
+      if (v) u.voice = v;
+      u.rate = tts.rate || 1;
+      u.volume = tts.volume == null ? 0.9 : tts.volume;
+      queued++;
+      u.onend = u.onerror = () => { queued = Math.max(0, queued - 1); };
+      synth.speak(u);
+    }
+
+    function say(text, tts) {
+      if (!text) return;
+      const name = cloudName(tts.voice);
+      if (name) {
+        if (queued >= 6) return;
+        queued++;
+        cloudQueue.push({ text, tts, name });
+        playNextCloud();
+        return;
+      }
+      if (!synth) return;
       if (queued >= 6) return; // don't build a backlog during a flood of alerts
       const u = new SpeechSynthesisUtterance(text);
       const v = tts.voice && voices().find(x => x.name === tts.voice);
@@ -535,12 +581,17 @@
       setTimeout(() => say(text, tts), 900);
     }
 
-    function stop() { if (synth) { synth.cancel(); queued = 0; } }
-    function speaking() { return !!synth && (synth.speaking || synth.pending); }
+    function stop() {
+      cloudQueue.length = 0;
+      if (cloudAudio) { const a = cloudAudio; cloudAudio = null; a.pause(); a.removeAttribute('src'); }
+      if (synth) synth.cancel();
+      queued = 0;
+    }
+    function speaking() { return !!cloudAudio || (!!synth && (synth.speaking || synth.pending)); }
 
-    return { available: !!synth, voices, say, forEvent, stop, speaking };
+    return { available: !!synth || typeof Audio === 'function', voices, say, forEvent, stop, speaking, CLOUD };
   })();
 
-  const VERSION = '0.0.16';
+  const VERSION = '0.0.17';
   window.UniChat = { VERSION, api, storePin, fmtMoney, icon, esc, safeUrl, safeColor, renderEvent, connect, Sound, Speech, classify, plainText, NAMES, PLATFORMS, ALERT_KINDS, KIND_LABEL, KIND_EMOJI, fmtTime, nameHtml, avatarHtml, swapAvatar, partsHtml, shownParts, userColor, statusTone, attemptText, fmtCount, fmtDuration };
 })();
