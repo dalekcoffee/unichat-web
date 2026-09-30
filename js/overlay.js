@@ -33,8 +33,31 @@
     return opt.alerts;
   }
 
+  // Alerts the chat page reads aloud appear there only once their voice is ready. The overlay (usually OBS, a separate
+  // browser that can't see the chat page) can't know when that is, so it holds those alerts back a set time instead
+  // (Settings → Display, 6 s by default) to land closer to the voice. It never speaks itself.
+  const held = new Map(); // id → timer
+  function holdSeconds(e) {
+    if (!settings || e.missed || e.kind === 'chat' || e.kind === 'system') return 0;
+    const sec = settings.display && settings.display.overlayVoiceDelaySec;
+    if (!(sec > 0)) return 0;
+    // "Read alerts aloud" may be off in the overlay's own link even when the chat page has it on, so only the kinds count.
+    const s = Object.assign({}, settings, { tts: Object.assign({}, settings.tts, { enabled: true }) });
+    return U.Speech.willRead(e, s) ? sec : 0;
+  }
+
   function add(e, live) {
     if (!wanted(e)) return;
+    const wait = live ? holdSeconds(e) : 0;
+    if (wait) {
+      if (held.has(e.id)) return;
+      held.set(e.id, setTimeout(() => { held.delete(e.id); show(e, true); }, wait * 1000));
+      return;
+    }
+    show(e, live);
+  }
+
+  function show(e, live) {
     // Only recent history on (re)load, so an old backlog doesn't flash up on stream.
     if (!live && fadeSeconds() > 0 && Date.now() - e.ts > fadeSeconds() * 1000) return;
 
@@ -76,6 +99,8 @@
         case 'hello':
           applySettings(msg.settings);
           feed.innerHTML = '';
+          held.forEach(clearTimeout);
+          held.clear();
           (msg.history || []).forEach(e => add(e, false));
           break;
         case 'event':
@@ -83,6 +108,7 @@
           break;
         case 'delete': case 'remove':
           (msg.ids || []).forEach(id => {
+            if (held.has(id)) { clearTimeout(held.get(id)); held.delete(id); }
             const el = feed.querySelector(`.msg[data-id="${CSS.escape(id)}"]`);
             if (el) el.remove();
           });

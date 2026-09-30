@@ -62,7 +62,7 @@
     tts: { enabled: false, kinds: { follow: false, donation: true, sub: true, raid: false }, readNames: true, voice: 'kokoro:af_heart', rate: 1, volume: 0.9, maxChars: 200 },
     display: {
       fontSize: 16, showTimestamps: true, showAvatars: true, showPlatformIcons: true, showBadges: true,
-      maxMessages: 300, theme: 'dark', overlayFadeSec: 30, alertsInChat: false, platformColors: true,
+      maxMessages: 300, theme: 'dark', overlayFadeSec: 30, overlayVoiceDelaySec: 6, alertsInChat: false, platformColors: true,
       panelLayout: 'auto', // alerts panel: 'auto' (right of chat; above it on narrow/portrait screens), 'side' or 'stacked' (the divider's ⇄ flips sides per device)
       removeDoneAfterSec: 30, // thanked alerts / answered questions leave the panel after this long (0 = keep them)
       keepAwake: false, // chat page: stop this device's screen from sleeping while the chat is showing
@@ -165,6 +165,7 @@
     s.display.fontSize = Math.round(clamp(s.display.fontSize, 10, 48, 16));
     s.display.maxMessages = Math.round(clamp(s.display.maxMessages, 50, 2000, 300));
     s.display.overlayFadeSec = Math.round(clamp(s.display.overlayFadeSec, 0, 3600, 30));
+    s.display.overlayVoiceDelaySec = Math.round(clamp(s.display.overlayVoiceDelaySec, 0, 120, 6));
     s.display.removeDoneAfterSec = Math.round(clamp(s.display.removeDoneAfterSec, 0, 3600, 30));
     s.display.missedHighlightSec = Math.round(clamp(s.display.missedHighlightSec, 0, 3600, 15));
     s.popup.seconds = Math.round(clamp(s.popup.seconds, 2, 60, 6));
