@@ -110,6 +110,8 @@
   /** The element to show for an event, or null if filters / settings hide it. */
   function feedElement(e, cls) {
     if (isAlert(e) && settings && settings.display && settings.display.alertsInChat === false) return null;
+    // Alerts missed while away (filled in after a reconnect) go to the Alerts panel only, not into the chat as well.
+    if (isAlert(e) && e.missed === true) return null;
     if (cls.hidden) return null;
     const el = U.renderEvent(e, theme, cls);
     el.dataset.ts = String(e.ts); // missed messages slot in by time (see insertMissed)
@@ -256,9 +258,8 @@
   // by the time they were sent, between a "While you were away" line (how long, how many, from where) and a "Back live"
   // line, highlighted for Settings → Display → "Highlight messages missed while away" seconds. The two lines stay until
   // the next time away; nothing shows when nothing was missed. If what you missed doesn't fit on screen, the chat opens
-  // at the "While you were away" line so you can read on, with "↓ Back to live" to skip to the newest.
-  const NO_CATCH_UP = ['velora', 'blaze', 'nimo']; // platforms that can't send chat from while you were away
-  const ALERT_WORDS = { follow: 'follow', donation: 'donation', sub: 'sub', raid: 'raid', redemption: 'redemption' };
+  // at the "While you were away" line so you can read on, with "↓ Back to live" to skip to the newest. It's chat only:
+  // alerts from while you were away are in the Alerts panel.
   let awayView = null;       // { from, back, ids: Set of lines in the missed section, divider, marker }
   let readingMissed = false; // the chat opened at the "While you were away" line
   const missedAt = new Map(); // id → when it was shown as missed (the highlight's time runs from then)
@@ -266,7 +267,7 @@
   const receivedWhileAway = e => { const t = receivedAt.get(e); return !!awayView && t >= awayView.from && t < awayView.back; };
   // In the section: lines that came in while the page was hidden, and missed ones filled in during the minute after
   // coming back. Later catch-ups (e.g. a connection blip) are highlighted where they belong, without a section.
-  const inAwaySection = e => !!awayView && e.kind !== 'system' && !isNote(e) && (receivedWhileAway(e)
+  const inAwaySection = e => !!awayView && e.kind === 'chat' && !isNote(e) && (receivedWhileAway(e)
     || (e.missed === true && receivedAt.get(e) >= awayView.back && Date.now() - awayView.back < 60000));
   const lineFor = id => feed.querySelector(`.msg${byId(id)}`);
   const highlightMs = () => Math.max(0, Number(settings && settings.display && settings.display.missedHighlightSec) || 0) * 1000;
@@ -361,19 +362,13 @@
     lines[lines.length - 1].after(a.marker);
     const missed = events.filter(e => a.ids.has(e.id));
     const byPlatform = new Map();
-    const byKind = new Map();
-    for (const e of missed) {
-      byPlatform.set(e.platform, (byPlatform.get(e.platform) || 0) + 1);
-      if (Object.prototype.hasOwnProperty.call(ALERT_WORDS, e.kind)) byKind.set(e.kind, (byKind.get(e.kind) || 0) + 1);
-    }
+    for (const e of missed) byPlatform.set(e.platform, (byPlatform.get(e.platform) || 0) + 1);
     const secs = Math.max(1, Math.round((a.back - a.from) / 1000));
     const time = secs < 60 ? `${secs}s` : secs < 3600 ? `${Math.floor(secs / 60)}m ${String(secs % 60).padStart(2, '0')}s` : U.fmtDuration(secs * 1000);
+    // One chip per platform, e.g. "[Twitch icon] 4 from Twitch".
     const chips = [...byPlatform].sort((x, y) => U.PLATFORMS.indexOf(x[0]) - U.PLATFORMS.indexOf(y[0]))
-      .map(([p, n]) => `<span title="${U.esc(U.NAMES[p] || p)}">${U.icon(p)}${n}</span>`)
-      .concat([...byKind].map(([k, n]) => `<span>${U.KIND_EMOJI[k] || ''} ${n} ${ALERT_WORDS[k]}${n === 1 ? '' : 's'}</span>`));
-    const cant = statuses.filter(s => NO_CATCH_UP.includes(s.platform) && !['disabled', 'setup'].includes(s.state)).map(s => s.label);
-    if (cant.length) chips.push(`<span class="ad-none">${U.esc(cant.length > 1 ? `${cant.slice(0, -1).join(', ')} and ${cant[cant.length - 1]}` : cant[0])} can't fill in</span>`);
-    a.divider.innerHTML = `<div class="ad-line"><span>While you were away · ${U.esc(time)} · ${missed.length} missed</span></div><div class="ad-chips">${chips.join('')}</div>`;
+      .map(([p, n]) => `<span>${U.icon(p)}${n} from ${U.esc(U.NAMES[p] || p)}</span>`);
+    a.divider.innerHTML = `<div class="ad-line"><span>While you were away · ${U.esc(time)} · ${missed.length} missed message${missed.length === 1 ? '' : 's'}</span></div><div class="ad-chips">${chips.join('')}</div>`;
   }
 
   /**
@@ -1478,7 +1473,6 @@
           statuses = msg.status || [];
           renderPills();
           renderBanners();
-          if (awayView) placeAway(); // its "can't fill in" note follows which platforms are on
           break;
         case 'settings':
           applySettings(msg.settings);

@@ -13,6 +13,7 @@
   // This copy of UniChat opens on DalekCoffee's channels, so a new browser only needs the Euler key. A blank name means
   // "use the default"; each platform's switch in Settings turns it off.
   const DEFAULTS = {
+    settingsVersion: 2, // bumped when a default changes in a way saved settings should follow (see migrate)
     twitch: { enabled: true, channel: 'dalekcoffee',
       catchUp: true }, // after a reconnect, fill in chat missed meanwhile (from recent-messages.robotty.de, see twitch.js)
     tikTok: { enabled: true, username: 'dalekcoffee', eulerKey: '', minGiftCoinsForSound: 0, showLikes: true, showShares: true, showJoins: true,
@@ -26,7 +27,7 @@
     nimo: { enabled: true, channel: 'dalekcoffee', roomId: 1592342521 },
     alerts: {
       kinds: {
-        chat: kind(true, 'builtin:pop', 0.45),
+        chat: kind(true, 'builtin:pop', 0.8),
         follow: kind(true, 'builtin:chime', 0.7),
         donation: kind(true, 'builtin:coins', 0.8),
         sub: kind(true, 'builtin:fanfare', 0.8),
@@ -179,11 +180,24 @@
     }
     s.filters.blockedWords = [...new Set((s.filters.blockedWords || []).map(x => String(x).trim()).filter(Boolean))].slice(0, 500);
     s.highlights.keywords = [...new Set((s.highlights.keywords || []).map(x => String(x).trim()).filter(Boolean))].slice(0, 500);
+    s.settingsVersion = DEFAULTS.settingsVersion;
     return sanitizeChoices(s);
   }
 
+  /**
+   * Saved settings (or a settings file) from before a default changed: values still at the old default move to the new
+   * one; values someone picked stay. Saved settings store every value, so without this they'd keep the old default.
+   */
+  function migrate(s) {
+    if (!isObj(s) || Number(s.settingsVersion) >= DEFAULTS.settingsVersion) return s;
+    // v2 (0.0.15): the chat sound's default volume went from 45% to 80%.
+    const chat = isObj(s.alerts) && isObj(s.alerts.kinds) && s.alerts.kinds.chat;
+    if (isObj(chat) && chat.volume === 0.45) chat.volume = 0.8;
+    return s;
+  }
+
   function readSaved() {
-    try { return JSON.parse(localStorage.getItem(KEY) || 'null'); } catch { return null; }
+    try { return migrate(JSON.parse(localStorage.getItem(KEY) || 'null')); } catch { return null; }
   }
 
   // ---------- Bookmarkable links ----------
@@ -330,7 +344,7 @@
     let parsed = JSON.parse(text);
     if (isObj(parsed) && isObj(parsed.settings)) parsed = parsed.settings; // current format (older files were the bare settings)
     if (!isObj(parsed) || !(isObj(parsed.twitch) || isObj(parsed.tikTok) || isObj(parsed.kick) || isObj(parsed.velora) || isObj(parsed.blaze) || isObj(parsed.nimo) || isObj(parsed.display))) throw new Error('Not a UniChat settings file');
-    return save(merge(loadSaved(), parsed));
+    return save(merge(loadSaved(), migrate(parsed)));
   }
 
   window.UniChatStore = { KEY, DEFAULTS, RELAY_URL, load, loadSaved, save, exportJson, importJson, normalizeTwitch, normalizeTikTok, normalizeKick, normalizeVelora, normalizeBlaze, normalizeNimo, shareUrl, hasUrlConfig };

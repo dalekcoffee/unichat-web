@@ -286,7 +286,6 @@ body.no-avatars .msg .avatar { display: none; }
   background: color-mix(in srgb, var(--wait) 16%, transparent); color: var(--text);
 }
 .ad-chips svg { width: 1.1em; height: 1.1em; }
-.ad-chips .ad-none { background: none; border: 1px solid var(--line); color: var(--text-dim); }
 .away-marker { margin: 6px 2px 8px; color: var(--text-faint); font-size: .74em; }
 .away-marker::before, .away-marker::after { content: ""; flex: 1; height: 1px; background: var(--line); }
 body.overlay .away-divider, body.overlay .away-marker { display: none; }
