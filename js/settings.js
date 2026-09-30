@@ -108,7 +108,7 @@
 
   function applyTheme(theme) { document.documentElement.dataset.theme = theme === 'light' ? 'light' : 'dark'; }
   function markPlatformCards() {
-    $$('.card-head .switch input').forEach(i => i.closest('.card').classList.toggle('off', !i.checked));
+    $$('.plat-head .switch input').forEach(i => i.closest('.plat-block').classList.toggle('off', !i.checked));
   }
 
   // ---------- sound pickers ----------
@@ -509,7 +509,7 @@
           <td><span class="pill t-${t.tone}${s.state === 'stopped' ? ' failed' : ''}"><span class="dot"></span>${U.esc(t.text)}</span></td>
           <td><b>${U.esc(s.label)}</b> <span class="detail">${U.esc([s.detail, ...extra, t.note].filter(Boolean).join(' · '))}</span></td>
         </tr>`;
-        }).join('') || '<tr><td class="help">No platforms set up.</td></tr>';
+        }).join('') || '<tr><td class="help keep">No platforms set up.</td></tr>';
       } else if (m.type === 'diag' && typeof m.line === 'string') {
         logs.unshift(m.line.slice(0, 1000));
         logs.length = Math.min(logs.length, 100);

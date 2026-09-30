@@ -729,7 +729,13 @@ body.settings { --top-h: 58px; height: auto; min-height: 100%; }
   scroll-margin-top: calc(var(--top-h) + 16px);
 }
 .card-body { display: flex; flex-direction: column; gap: 14px; transition: opacity .2s; }
-.card.off .card-body { opacity: .45; }
+/* Connections: each platform is a panel inside the card, dimmed while it's turned off */
+.plat-block {
+  display: flex; flex-direction: column; gap: 14px; padding: 16px 18px;
+  border: 1px solid var(--line); border-radius: 12px; background: color-mix(in srgb, var(--bg-elev-2) 45%, transparent);
+}
+.plat-block.off .card-body { opacity: .45; }
+.card .plat-head h3 { font-size: 16px; margin: 1px 0 3px; padding: 0; border: 0; color: var(--text); text-transform: none; letter-spacing: 0; line-height: 1.25; }
 .card-head { display: flex; align-items: flex-start; gap: 14px; }
 .card-head .ico {
   flex: none; width: 40px; height: 40px; border-radius: 11px; display: inline-flex; align-items: center; justify-content: center;
@@ -917,6 +923,7 @@ body.settings .sr-controls select, body.settings .test-row select { width: auto;
   .card-head .ico { width: 34px; height: 34px; border-radius: 9px; }
   .card-head .ico svg { width: 18px; height: 18px; }
   .card-head h2 { font-size: 16px; }
+  .plat-block { padding: 12px; gap: 12px; }
   .chip-checks { padding-left: 0; }
   .sr-label .help { margin-left: 0; }
   .toggles { grid-template-columns: 1fr; }
@@ -928,6 +935,8 @@ body.settings .sr-controls select, body.settings .test-row select { width: auto;
   .s-back span { display: none; }
   .s-back { padding: 0 10px; }
   .s-brand span { display: none; }
+  .s-top { gap: 8px; }
+  .s-crumb { display: none; } /* the page is plainly Settings; keeps the back button on screen */
 }
 
 /* ---------- Medium widths: top-bar buttons show icons only (names in their tooltips) so the status pills fit ---------- */
