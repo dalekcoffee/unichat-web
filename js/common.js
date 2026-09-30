@@ -481,12 +481,12 @@
     };
     const BUILTIN_NAMES = { pop: 'Pop', blip: 'Blip', chime: 'Chime', ding: 'Ding', bell: 'Bell', coins: 'Coins', fanfare: 'Fanfare', levelup: 'Level up', whoosh: 'Whoosh', error: 'Alert buzz', failed: 'Failed', sparkle: 'Sparkle' };
 
-    const SOUND_BOOST = 2.2;
+    const SOUND_BOOST = 3.1;
     let limiterNode = null;
     function limiter(c) {
       if (limiterNode) return limiterNode;
       limiterNode = c.createDynamicsCompressor();
-      limiterNode.threshold.value = -6;
+      limiterNode.threshold.value = -3; // loudest peaks ~40% higher than the old -6
       limiterNode.knee.value = 6;
       limiterNode.ratio.value = 12;
       limiterNode.attack.value = 0.003;
@@ -559,8 +559,8 @@
   // ---------- Text-to-speech (browser's built-in voices) ----------
   const Speech = (function () {
     const synth = window.speechSynthesis;
-    // Voices are much louder than the alert sounds, so 100% on the voice slider is only this share of full volume.
-    const VOICE_BASE = 0.35;
+    // 100% on the voice slider is this share of full volume. UniChat's voices are levelled first (js/voice-worker.js).
+    const VOICE_BASE = 0.4;
     const voiceVolume = tts => Math.max(0, Math.min(1, tts.volume == null ? 0.9 : tts.volume)) * VOICE_BASE;
     let queued = 0;
 
@@ -700,6 +700,6 @@
     return { available: !!synth || typeof Worker === 'function', voices, say, forEvent, prepare, warmUp, stop, speaking, KOKORO };
   })();
 
-  const VERSION = '0.0.19';
+  const VERSION = '0.0.20';
   window.UniChat = { VERSION, api, storePin, fmtMoney, icon, esc, safeUrl, safeColor, renderEvent, connect, Sound, Speech, classify, nameHasSlur, plainText, NAMES, PLATFORMS, ALERT_KINDS, KIND_LABEL, KIND_EMOJI, fmtTime, nameHtml, avatarHtml, swapAvatar, partsHtml, shownParts, userColor, statusTone, attemptText, fmtCount, fmtDuration };
 })();

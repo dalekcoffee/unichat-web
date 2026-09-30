@@ -13,7 +13,7 @@
   // This copy of UniChat opens on DalekCoffee's channels, so a new browser only needs the Euler key. A blank name means
   // "use the default"; each platform's switch in Settings turns it off.
   const DEFAULTS = {
-    settingsVersion: 6, // bumped when a default changes in a way saved settings should follow (see migrate)
+    settingsVersion: 7, // bumped when a default changes in a way saved settings should follow (see migrate)
     twitch: { enabled: true, channel: 'dalekcoffee',
       catchUp: true }, // after a reconnect, fill in chat missed meanwhile (from recent-messages.robotty.de, see twitch.js)
     tikTok: { enabled: true, username: 'dalekcoffee', eulerKey: '', minGiftCoinsForSound: 0, showLikes: true, showShares: true, showJoins: true,
@@ -59,7 +59,7 @@
     // Stream preview button (chat page top bar): your stream in a popup, from Beam's player (beamstream.gg/<beam>/embed).
     // Loaded only while the popup is open. TikTok LIVE can't be shown inside other sites, so Beam is the one player.
     preview: { enabled: true, beam: 'dalek' },
-    tts: { enabled: false, kinds: { follow: false, donation: true, sub: false, raid: false }, readNames: true, voice: 'kokoro:af_heart', rate: 1, volume: 0.9, maxChars: 200 },
+    tts: { enabled: false, kinds: { follow: false, donation: true, sub: true, raid: false }, readNames: true, voice: 'kokoro:af_heart', rate: 1, volume: 0.9, maxChars: 200 },
     display: {
       fontSize: 16, showTimestamps: true, showAvatars: true, showPlatformIcons: true, showBadges: true,
       maxMessages: 300, theme: 'dark', overlayFadeSec: 30, alertsInChat: false, platformColors: true,
@@ -209,6 +209,8 @@
     if ((Number(s.settingsVersion) || 1) < 5 && isObj(s.highlights) && s.highlights.volume === 0.6) s.highlights.volume = 0.5;
     // v6 (0.0.18): UniChat's own voice (Kokoro Heart) replaces the StreamElements voices, which now need a key.
     if ((Number(s.settingsVersion) || 1) < 6 && isObj(s.tts) && (s.tts.voice === '' || s.tts.voice === undefined || /^se:/.test(String(s.tts.voice)))) s.tts.voice = 'kokoro:af_heart';
+    // v7 (0.0.20): sub messages are read aloud too ("Name says: …"), like donations.
+    if ((Number(s.settingsVersion) || 1) < 7 && isObj(s.tts) && isObj(s.tts.kinds) && s.tts.kinds.sub === false) s.tts.kinds.sub = true;
     return s;
   }
 

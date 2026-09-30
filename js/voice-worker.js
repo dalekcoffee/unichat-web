@@ -18,6 +18,18 @@ function load() {
   return loading;
 }
 
+// The voices come out quiet and uneven (Sky is softer than Heart), so every line is brought to the same loudness,
+// without letting its loudest moment clip.
+function level(samples) {
+  if (!samples || !samples.length) return;
+  let peak = 0, sum = 0;
+  for (const v of samples) { const a = Math.abs(v); if (a > peak) peak = a; sum += v * v; }
+  const rms = Math.sqrt(sum / samples.length);
+  if (!rms || !peak) return;
+  const gain = Math.min(0.1 / rms, 0.95 / peak);
+  for (let i = 0; i < samples.length; i++) samples[i] *= gain;
+}
+
 // One at a time, in order.
 let chain = Promise.resolve();
 self.onmessage = ev => {
@@ -45,6 +57,7 @@ self.onmessage = ev => {
       }).filter(Boolean);
       for (let i = 0; i < parts.length; i++) {
         const audio = await tts.generate(parts[i], { voice, speed });
+        level(audio.audio);
         const wav = audio.toWav();
         self.postMessage({ type: 'audio', id: m.id, wav, part: i, last: i === parts.length - 1 }, [wav]);
       }
