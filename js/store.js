@@ -13,7 +13,7 @@
   // This copy of UniChat opens on DalekCoffee's channels, so a new browser only needs the Euler key. A blank name means
   // "use the default"; each platform's switch in Settings turns it off.
   const DEFAULTS = {
-    settingsVersion: 2, // bumped when a default changes in a way saved settings should follow (see migrate)
+    settingsVersion: 3, // bumped when a default changes in a way saved settings should follow (see migrate)
     twitch: { enabled: true, channel: 'dalekcoffee',
       catchUp: true }, // after a reconnect, fill in chat missed meanwhile (from recent-messages.robotty.de, see twitch.js)
     tikTok: { enabled: true, username: 'dalekcoffee', eulerKey: '', minGiftCoinsForSound: 0, showLikes: true, showShares: true, showJoins: true,
@@ -61,7 +61,7 @@
     tts: { enabled: false, kinds: { donation: true, sub: false }, readNames: true, voice: '', rate: 1, volume: 0.9, maxChars: 200 },
     display: {
       fontSize: 16, showTimestamps: true, showAvatars: true, showPlatformIcons: true, showBadges: true,
-      maxMessages: 300, theme: 'dark', overlayFadeSec: 30, alertsInChat: true, platformColors: true,
+      maxMessages: 300, theme: 'dark', overlayFadeSec: 30, alertsInChat: false, platformColors: true,
       panelLayout: 'auto', // alerts panel: 'auto' (right of chat; above it on narrow/portrait screens), 'side' or 'stacked' (the divider's ⇄ flips sides per device)
       removeDoneAfterSec: 30, // thanked alerts / answered questions leave the panel after this long (0 = keep them)
       keepAwake: false, // chat page: stop this device's screen from sleeping while the chat is showing
@@ -192,7 +192,9 @@
     if (!isObj(s) || Number(s.settingsVersion) >= DEFAULTS.settingsVersion) return s;
     // v2 (0.0.15): the chat sound's default volume went from 45% to 80%.
     const chat = isObj(s.alerts) && isObj(s.alerts.kinds) && s.alerts.kinds.chat;
-    if (isObj(chat) && chat.volume === 0.45) chat.volume = 0.8;
+    if ((Number(s.settingsVersion) || 1) < 2 && isObj(chat) && chat.volume === 0.45) chat.volume = 0.8;
+    // v3 (0.0.16): alerts show in the Alerts panel only, not in the chat too (Settings → Display turns them back on).
+    if ((Number(s.settingsVersion) || 1) < 3 && isObj(s.display) && s.display.alertsInChat === true) s.display.alertsInChat = false;
     return s;
   }
 
