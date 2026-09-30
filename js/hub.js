@@ -10,7 +10,11 @@
   const ALERT_KINDS = ['follow', 'donation', 'sub', 'raid', 'redemption', 'hype'];
   const PANEL_KEY = 'unichat.web.panel';
   const VIEWERS_KEY = 'unichat.web.viewers';
-  const HISTORY_KEY = 'unichat.web.history'; // this tab's recent chat (sessionStorage: gone when the tab closes)
+  const CHAT_KEY = 'unichat.web.chat'; // the chat page's recent chat, kept for KEEP_CHAT_MS (see restoreHistory)
+  const OLD_HISTORY_KEY = 'unichat.web.history'; // before 2026-09-29: per tab, in sessionStorage
+  const KEEP_CHAT_MS = 2 * 3600000;
+  // After time away, platforms send what you missed over the next minute or so (they reconnect one by one).
+  const CATCH_UP_MS = 60000;
   const LEARNING_MS = 6 * 3600 * 1000;
   const BACKOFF = [2, 4, 8, 15, 30, 60];
   // A dropped connection retries quietly (short blips are normal). After QUIET_TRIES failed tries it turns red and plays
@@ -19,6 +23,11 @@
   const CONNECT_TIMEOUT_MS = 45000; // a try that hasn't connected by then counts as failed (timed out)
   const RECONNECT_NOTE_MS = 5000; // "connection lost" + "reconnected" lines leave the chat this long after it's back
   const CONNECTION_NOTES = ['connection-lost', 'connection-failing', 'connection-stopped', 'reconnected'];
+  // Phones pause a page in the background (another app, screen off) and the platforms drop its connections. Hidden at
+  // least AWAY_MS counts as "was away"; a drop noticed while hidden or within RESUME_GRACE_MS of coming back is the
+  // phone's doing, not a real problem (see pausedDrop). The grace outlasts the slowest "still there?" check (30 s).
+  const AWAY_MS = 5000, RESUME_GRACE_MS = 45000;
+  const PHONE = matchMedia('(pointer: coarse)'); // touch-first devices: phones and tablets
 
   const state = {
     settings: Store.load(),
@@ -54,42 +63,109 @@
     .filter(e => e && typeof e === 'object' && !Array.isArray(e) && typeof e.id === 'string' && typeof e.kind === 'string' && typeof e.platform === 'string')
     .slice(-max).map(tidyEvent);
 
+  // Every message ID shown recently. A platform can send a message again (TikTok resends its recent chat after a
+  // reconnect): one already shown, or dismissed, isn't shown twice, while messages missed in between still arrive.
+  const seenIds = new Set();
+  function rememberId(id) {
+    seenIds.add(id);
+    if (seenIds.size > 5000) seenIds.delete(seenIds.values().next().value);
+  }
+
   function restoreSaved() {
     const saved = readJson(PANEL_KEY, {}) || {};
     state.alerts = events(saved.alerts, ALERTS);
     state.questions = events(saved.questions, QUESTIONS);
     state.pins = events(saved.pins, PINS);
+    [...state.alerts, ...state.questions].forEach(e => rememberId(e.id));
+    // The same message saved twice (before duplicates were caught) is kept once.
+    const once = list => list.filter((e, i) => list.findIndex(x => x.id === e.id) === i);
+    state.alerts = once(state.alerts);
+    state.questions = once(state.questions);
+    state.pins = once(state.pins);
     for (const d of Array.isArray(saved.done) ? saved.done : []) {
       if (Array.isArray(d) && typeof d[0] === 'string' && Number.isFinite(d[1])) state.done.set(d[0], d[1]);
       else if (typeof d === 'string') state.done.set(d, now()); // saved before ticks had times
     }
   }
 
-  // The chat page keeps its recent messages for as long as its tab is open, so a reload, or opening Settings in the
-  // same tab, doesn't wipe the chat. Session storage is per tab and cleared when the tab closes. The overlay starts fresh.
+  // The chat page keeps its recent messages in this browser for 2 hours, so a reload, Firefox unloading the tab in the
+  // background, or reopening the browser or the installed app brings the chat back. The overlay always starts fresh.
+  // Saved with them: when the page was left (hidden or closed), so what arrives meanwhile shows as missed (see away).
   let keepHistory = false;
   let historyTimer = null;
   function restoreHistory() {
-    let saved = null;
-    try { saved = JSON.parse(sessionStorage.getItem(HISTORY_KEY) || 'null'); } catch { /* blocked or damaged: start empty */ }
+    let saved = readJson(CHAT_KEY, null);
+    try {
+      const old = JSON.parse(sessionStorage.getItem(OLD_HISTORY_KEY) || 'null');
+      if (!saved && Array.isArray(old)) saved = { savedAt: now(), history: old };
+      sessionStorage.removeItem(OLD_HISTORY_KEY);
+    } catch { /* blocked or damaged */ }
+    if (!saved || typeof saved !== 'object' || !(now() - Number(saved.savedAt) < KEEP_CHAT_MS)) saved = { history: [] };
+    const leftAt = Number(saved.leftAt);
+    const reopened = leftAt > 0 && leftAt <= now() && now() - leftAt < KEEP_CHAT_MS;
+    const savedLag = saved.lag && typeof saved.lag === 'object' && !Array.isArray(saved.lag) ? saved.lag : {};
+    saved = saved.history;
     const known = new Set(state.history.map(e => e.id));
     // Connection notes belong to the previous page's connections (a reload drops them all), so they aren't brought back.
     const connectionNote = e => e.kind === 'system' && CONNECTION_NOTES.includes(e.code);
-    state.history = events(saved, HISTORY).filter(e => !known.has(e.id) && !connectionNote(e)).concat(state.history).slice(-HISTORY);
+    // Lines that clear by themselves (e.g. TikTok joins) and whose time ran out while the page was away don't come back.
+    const expired = e => e.expiresAt !== undefined && e.expiresAt <= now();
+    const restored = events(saved, HISTORY).filter(e => !known.has(e.id) && !connectionNote(e) && !expired(e));
+    restored.forEach(e => { rememberId(e.id); expireLater(e); });
+    state.history = restored.concat(state.history).slice(-HISTORY);
+    for (const [p, v] of Object.entries(savedLag)) {
+      if (EVENT_PLATFORMS.includes(p) && Number.isFinite(v) && Math.abs(v) < 86400000) lag[p] = v;
+    }
+    if (reopened) away = { from: leftAt, back: now(), seen: newestSeen(), lag: lagCopy() };
   }
-  function saveHistory() {
+
+  /** A line with an expiry time (expiresAt) leaves the chat then, gently (dashboard.js folds it away). */
+  function expireLater(e) {
+    if (e.expiresAt !== undefined) setTimeout(() => hub.removeLines([e.id]), Math.max(0, e.expiresAt - now()));
+  }
+  /** leftAt: when the page was left (hidden or closing), or null while it's on screen. */
+  function saveHistory(leftAt) {
     clearTimeout(historyTimer);
     historyTimer = null;
     if (!keepHistory) return;
-    try { sessionStorage.setItem(HISTORY_KEY, JSON.stringify(state.history)); } catch { /* full or blocked: not fatal */ }
+    if (leftAt === undefined) leftAt = document.hidden || leaving ? hiddenSince || now() : null; // leaving: closing or reloading
+    writeJson(CHAT_KEY, { savedAt: now(), leftAt, lag, history: state.history });
   }
-  function saveHistorySoon() { if (keepHistory && !historyTimer) historyTimer = setTimeout(saveHistory, 2000); }
+  function saveHistorySoon() { if (keepHistory && !historyTimer) historyTimer = setTimeout(() => saveHistory(), 2000); }
   // The browser closes every connection as the page is reloaded or closed: that's not a lost connection to announce.
   let leaving = false;
   window.addEventListener('beforeunload', () => { leaving = true; setTimeout(() => { leaving = false; }, 3000); }); // still here: it didn't close
   window.addEventListener('pagehide', () => { leaving = true; });
   window.addEventListener('pageshow', e => { if (e.persisted) leaving = false; }); // back from the browser's page cache
-  window.addEventListener('pagehide', saveHistory);
+  // Saved as the page goes: phones can close a hidden page without warning, so hiding saves too.
+  window.addEventListener('pagehide', () => saveHistory(hiddenSince || now()));
+  document.addEventListener('visibilitychange', () => saveHistory());
+
+  // ---------- "While you were away" ----------
+  // The latest time away: the page hidden for AWAY_MS or more (another app, screen off), or closed / reloaded. For
+  // CATCH_UP_MS after coming back, messages sent while away are marked missed: they slot into the chat by time, and
+  // make no sounds or popups (the chat page highlights them under a "While you were away" divider).
+  let away = null; // { from, back, seen, lag }
+  const catchingUp = () => !!away && now() - away.back < CATCH_UP_MS;
+  // How far each platform's clock is behind this device (plus the usual delivery delay), learnt from live messages. It
+  // turns "when you came back" into that platform's time, so a clock that's off doesn't make new messages look missed.
+  const lag = Object.create(null);
+  function noteLag(platform, ts) {
+    const d = now() - ts;
+    if (Math.abs(d) > 86400000) return;
+    lag[platform] = lag[platform] === undefined ? d : Math.min(d, lag[platform] + 5000); // the smallest delay, allowed to drift
+  }
+  const lagCopy = () => Object.assign(Object.create(null), lag);
+  /**
+   * The newest message time per platform in the chat, by that platform's own clock (only lines that carried the
+   * platform's send time). Anything a platform resends that's older than this was already here (or scrolled out long
+   * ago), whatever this device's clock says.
+   */
+  function newestSeen() {
+    const seen = Object.create(null);
+    for (const e of state.history) if (e.pts === true && e.kind !== 'system' && e.code !== 'test' && !(seen[e.platform] >= e.ts)) seen[e.platform] = e.ts;
+    return seen;
+  }
 
   let panelTimer = null;
   function savePanelSoon() {
@@ -262,6 +338,11 @@
       e.user = null;
     }
     e.ts = Number(e.ts) > 0 ? Number(e.ts) : now();
+    if (e.missed !== undefined) e.missed = e.missed === true;
+    if (e.pts !== undefined) e.pts = e.pts === true;
+    // A line that clears itself does so within a day at most; anything else (e.g. edited saved chat) never expires.
+    if (e.expiresAt !== undefined && !(Number(e.expiresAt) > 0 && Number(e.expiresAt) < now() + 86400000)) delete e.expiresAt;
+    else if (e.expiresAt !== undefined) e.expiresAt = Number(e.expiresAt);
     e.parts = (Array.isArray(e.parts) ? e.parts : []).slice(0, 400)
       .filter(p => p && typeof p === 'object')
       .map(p => {
@@ -346,8 +427,22 @@
 
     publish(e) {
       if (!e.id) e.id = `${e.platform}:local-${now().toString(36)}-${++seq}`; // unique across reloads (panel lists are saved)
+      if (typeof e.id !== 'string' || seenIds.has(e.id)) return; // already shown (e.g. resent after a reconnect)
+      rememberId(e.id);
+      const sentTime = Number(e.ts) > 0; // the platform said when it was sent
       if (!e.ts) e.ts = now();
+      e.pts = sentTime; // ts is on the platform's clock (not this device's), see newestSeen
       tidyEvent(e);
+      if (sentTime && catchingUp() && e.kind !== 'system') {
+        // Older than the newest message already here from this platform (compared on the platform's own clock, so a
+        // phone clock that's off doesn't matter): a resend of something from before, already shown or long gone. Skipped.
+        const seen = away.seen[e.platform] || 0;
+        if (seen && e.ts < seen) return;
+        const back = away.back - (away.lag[e.platform] || 0); // when you came back, by this platform's clock
+        if (e.ts > (seen || away.from - (away.lag[e.platform] || 0)) && e.ts < back) e.missed = true;
+      }
+      // Learnt only from ordinary live traffic: during a catch-up, late arrivals would make the delay look bigger.
+      if (sentTime && !catchingUp() && e.kind !== 'system' && e.code !== 'test') noteLag(e.platform, e.ts);
       checkReply(e);
       if (emoteMatcher && e.kind !== 'system') e.parts = emoteMatcher(e.parts);
       const real = e.kind !== 'system' && e.platform !== 'system' && e.code !== 'test';
@@ -357,16 +452,32 @@
       }
       if (real && !e.historical) hub.lastActivity[e.platform] = now();
 
-      addCapped(state.history, e, HISTORY);
+      if (e.missed) {
+        // Missed messages slot in by the time they were sent (they arrive late, and platform by platform).
+        let i = state.history.length;
+        while (i > 0 && state.history[i - 1].ts > e.ts) i--;
+        state.history.splice(i, 0, e);
+        while (state.history.length > HISTORY) state.history.shift();
+      } else addCapped(state.history, e, HISTORY);
       saveHistorySoon();
+      expireLater(e);
       if (ALERT_KINDS.includes(e.kind)) { addCapped(state.alerts, e, ALERTS); savePanelSoon(); }
-      if (real && !e.historical && isQuestion(e)) { addCapped(state.questions, e, QUESTIONS); savePanelSoon(); }
+      const question = real && !e.historical && isQuestion(e);
+      if (question) { addCapped(state.questions, e, QUESTIONS); savePanelSoon(); }
       if (real && !e.historical) trackUser(e);
       if (real && !e.historical && RECAP_KINDS.includes(e.kind)) addToRecap(e);
-      broadcast({ type: 'event', event: e });
+      // The page's Questions tab follows this list exactly (it doesn't decide by itself), so a tick always reaches it.
+      broadcast({ type: 'event', event: e, question });
     },
 
     lastActivity: {},
+
+    /** Time of the newest message from a platform in this page's chat (0 if none), e.g. for catching up after a reload. */
+    latest(platform) {
+      let t = 0;
+      for (const e of state.history) if (e.platform === platform && e.kind !== 'system' && e.code !== 'test' && e.ts > t) t = e.ts;
+      return t;
+    },
 
     deleteMessages(platform, ids) {
       const set = new Set(ids);
@@ -521,6 +632,22 @@
     return { get };
   }
 
+  // ---------- "Still there?" check when the page comes back from the background ----------
+  /**
+   * For connectors (ctx.onResume): when the page comes back after a while away, ping() asks the server for an answer
+   * (skip it for servers that talk regularly by themselves). If nothing at all arrives within waitMs (lastData() is the
+   * time of the last data received), fail() ends the connection, which then reconnects quietly.
+   */
+  function watchResume(ctx, { lastData, ping, waitMs, fail }) {
+    if (!ctx || !ctx.onResume) return;
+    ctx.onResume(() => {
+      const asked = now();
+      if (ping) { try { ping(); } catch { /* closed meanwhile: its close handler reconnects */ } }
+      const wait = typeof waitMs === 'function' ? waitMs() : waitMs;
+      setTimeout(() => { if (lastData() < asked) fail(new ConnectorError('No answer after the page came back')); }, wait);
+    });
+  }
+
   // ---------- Socket.IO over the browser's own WebSocket (Velora and Blaze use it; no library needed) ----------
   /**
    * Runs one Socket.IO v4 connection (text events, one namespace) until it closes, then rejects with a ConnectorError
@@ -529,16 +656,21 @@
    * connection); hooks.event(name, data) runs for every event.
    * Protocol: engine packets 0 open · 1 close · 2 ping → 3 pong · 4 message; socket packets 0 connect · 1 disconnect
    * · 2 event · 4 connect error, then "/namespace," (omitted for "/"), an optional ack id, and JSON.
+   * ctx (optional): the connector's ctx, for the check when the page comes back from the background.
    */
-  function runSocketIo(url, namespace, signal, hooks) {
+  function runSocketIo(url, namespace, signal, hooks, ctx) {
     const nsp = namespace && namespace !== '/' ? namespace : '/';
     const prefix = nsp === '/' ? '' : nsp + ',';
     return new Promise((resolve, reject) => {
       const ws = new WebSocket(`${url}/socket.io/?EIO=4&transport=websocket`);
       let finished = false;
       let lastData = now();
+      let pingEvery = 25000;  // the server pings this often (updated from its settings)
       let deadAfter = 100000; // updated from the server's ping settings
       const watchdog = setInterval(() => { if (now() - lastData > deadAfter) finish(new ConnectorError('No data for too long')); }, 10000);
+      // The server pings every pingEvery, so a live connection hears from it within that time. (A client can't ping
+      // in this protocol version.)
+      watchResume(ctx, { lastData: () => lastData, waitMs: () => pingEvery + 5000, fail: err => finish(err) });
 
       function finish(err) {
         if (finished) return;
@@ -572,7 +704,11 @@
         const m = typeof ev.data === 'string' ? ev.data : '';
         switch (m[0]) {
           case '0': { // engine open: join the namespace
-            try { const o = JSON.parse(m.slice(1)); deadAfter = (Number(o.pingInterval) || 25000) + (Number(o.pingTimeout) || 20000) + 15000; } catch { /* keep default */ }
+            try {
+              const o = JSON.parse(m.slice(1));
+              pingEvery = Math.min(120000, Number(o.pingInterval) || 25000);
+              deadAfter = pingEvery + (Number(o.pingTimeout) || 20000) + 15000;
+            } catch { /* keep default */ }
             ws.send('40' + prefix);
             return;
           }
@@ -612,6 +748,10 @@
     const at = now();
     changed.forEach(id => state.done.set(id, at));
     if (changed.length) { broadcast({ type: 'ack', ids: changed, at }); savePanelSoon(); scheduleCleanup(); }
+    // A ticked item this list no longer has (e.g. dropped as the list filled up) just leaves the page's panel, instead of
+    // staying there ticked forever.
+    const unknown = targets.filter(id => typeof id === 'string' && !known.has(id));
+    if (unknown.length) broadcast({ type: 'dismiss', ids: unknown });
   }
 
   /** Undo a tick (clicked by mistake), so the item stays in the panel. */
@@ -662,9 +802,10 @@
     savePanelSoon();
   }
 
-  function unpin(id) {
+  function unpin(ids) {
+    const gone = new Set(ids);
     const before = state.pins.length;
-    state.pins = state.pins.filter(p => p.id !== id);
+    state.pins = state.pins.filter(p => !gone.has(p.id));
     if (state.pins.length !== before) { broadcast({ type: 'pins', pins: state.pins.slice() }); savePanelSoon(); }
   }
 
@@ -674,7 +815,8 @@
     else if (msg.type === 'unack' && Array.isArray(msg.ids)) unmarkDone(msg.ids.slice(0, 500));
     else if (msg.type === 'ackAll') markDone(null);
     else if (msg.type === 'pin' && typeof msg.id === 'string') pin(msg.id);
-    else if (msg.type === 'unpin' && typeof msg.id === 'string') unpin(msg.id);
+    else if (msg.type === 'unpin' && typeof msg.id === 'string') unpin([msg.id]);
+    else if (msg.type === 'unpinAll') unpin(state.pins.map(p => p.id));
     else if (msg.type === 'remove' && Array.isArray(msg.ids)) hub.removeLines(msg.ids.slice(0, 500));
     else if (msg.type === 'clearFeed') clearFeed();
     else if (msg.type === 'recapReset') startRecap(false);
@@ -719,6 +861,47 @@
     if (signal) signal.addEventListener('abort', () => { clearTimeout(t); resolve(); }, { once: true });
   });
 
+  // ---------- Coming back from the background (phones) ----------
+  // Switching to another app or turning the screen off pauses this page, and the platforms then drop its connections.
+  // Those drops reconnect straight away and quietly: no "connection lost" line, banner or sound. Coming back also checks
+  // every connection at once (each connector's ctx.onResume check) instead of waiting for its own timeout.
+  let hiddenSince = document.hidden ? now() : 0;
+  let resumedAt = 0;
+  /** A connection dropping now most likely dropped because the page was paused. */
+  const pausedDrop = () => document.hidden || now() - resumedAt < RESUME_GRACE_MS;
+  /** A phone with this page in the background: keep retrying, but quietly, until it's back on screen. */
+  const phoneAway = () => document.hidden && PHONE.matches;
+  function cameBack() {
+    resumedAt = now();
+    connectors.forEach(c => c.resumed());
+  }
+
+  // Twitch and TikTok matter most, so after a pause (or on opening the page, or the device coming back online) they
+  // connect first. The others wait until those two have connected (or given up; at most TURN_WAIT_MS), then follow in
+  // the top bar's order, a moment apart.
+  const FIRST = ['twitch', 'tiktok'];
+  const ORDER = ['twitch', 'tiktok', 'kick', 'velora', 'blaze', 'nimo'];
+  const TURN_WAIT_MS = 8000, TURN_GAP_MS = 400;
+  const trying = c => c.status.state === 'connecting' || c.status.state === 'reconnecting';
+  async function waitTurn(c, signal) {
+    if (FIRST.includes(c.def.platform)) return;
+    const until = now() + TURN_WAIT_MS;
+    const firstBusy = () => connectors.some(o => FIRST.includes(o.def.platform) && trying(o));
+    if (firstBusy()) c.setStatus('connecting', 'Waiting for Twitch and TikTok to connect first…');
+    while (firstBusy() && now() < until && !signal.aborted) await sleep(250, signal);
+    await sleep(Math.max(0, ORDER.indexOf(c.def.platform) - FIRST.length) * TURN_GAP_MS, signal);
+  }
+  document.addEventListener('visibilitychange', () => {
+    if (document.hidden) { if (!hiddenSince) hiddenSince = now(); return; }
+    const from = hiddenSince;
+    hiddenSince = 0;
+    if (!from || now() - from < AWAY_MS) return;
+    away = { from, back: now(), seen: newestSeen(), lag: lagCopy() };
+    broadcast({ type: 'away', away: { from: away.from, back: away.back } });
+    if (started) cameBack();
+  });
+  window.addEventListener('pageshow', e => { if (e.persisted && started) cameBack(); }); // back from the browser's page cache
+
   function registerConnector(def) {
     const c = {
       def,
@@ -728,6 +911,11 @@
       announcedDown: false,
       noteIds: [],        // this problem's lines in the chat ("connection lost", …), cleared once the connection is back
       everHealthy: false,
+      quietRetried: false, // this drop already had its quiet retry (see pausedDrop)
+      awayTries: 0,        // quiet retries while a phone has the page in the background
+      stoppedAway: false,  // it ran out of tries while the page was hidden: coming back tries again
+      resumeCheck: null,   // the running connection's "still there?" check (ctx.onResume)
+      waitForTurn: true,   // the next try lets Twitch and TikTok connect first (see waitTurn)
       status: { state: 'disabled', detail: '', attempt: 0, nextRetryAt: null },
 
       /** A line about this connection's problem in the chat (it leaves once the problem is over). */
@@ -783,10 +971,23 @@
           this.problemOver();
         }
         this.everHealthy = true;
+        this.quietRetried = false;
+        this.awayTries = 0;
         this.setStatus(stateName, detail);
       },
 
       restart() { if (this.abort) this.abort.abort(); },
+
+      /** The page is back on screen after a while away: reconnect now if it's down, or check it's still there. */
+      resumed() {
+        this.quietRetried = false;
+        this.awayTries = 0;
+        const st = this.status.state;
+        if (st === 'reconnecting' || (st === 'connecting' && this.status.nextRetryAt) || (st === 'stopped' && this.stoppedAway)) {
+          this.waitForTurn = true;
+          this.restart();
+        } else if (this.resumeCheck) this.resumeCheck();
+      },
 
       settingsChanged() {
         const key = def.configKey(state.settings);
@@ -817,6 +1018,11 @@
             continue;
           }
 
+          if (this.waitForTurn) {
+            this.waitForTurn = false;
+            await waitTurn(this, ac.signal);
+            if (ac.signal.aborted) { attempt = 0; continue; }
+          }
           if (attempt === 0) this.setStatus('connecting', 'Connecting…');
           else this.setStatus(lastConfig ? 'error' : 'reconnecting', lastReason, attempt);
 
@@ -833,6 +1039,8 @@
             waiting: current(detail => { if (!healthySince) healthySince = now(); this.healthy('waiting', detail); }),
             setLive: current(live => this.setLive(live)),
             stats: current(s => this.stats(s)),
+            /** fn() runs when the page comes back from the background, to check the connection still works. */
+            onResume: current(fn => { this.resumeCheck = () => { if (!tryAc.signal.aborted) fn(); }; }),
           };
 
           let reason = 'Connection closed';
@@ -844,6 +1052,7 @@
             reason = (e && e.message) || String(e);
           } finally {
             clearTimeout(timeout);
+            this.resumeCheck = null;
           }
           if (ac.signal.aborted) { attempt = 0; continue; } // settings changed or restart requested
           if (timedOut) { err = null; reason = `No answer within ${CONNECT_TIMEOUT_MS / 1000} seconds`; }
@@ -860,6 +1069,20 @@
           }
 
           if (healthySince && now() - healthySince > 30000) attempt = 0;
+
+          // Dropped because the page was paused in the background (see pausedDrop): try again straight away without a
+          // line, banner or sound. Only once per drop; if that try fails too, the usual steps below follow. A phone with
+          // the page still in the background keeps retrying quietly; coming back starts over at once (resumed()).
+          const inBackground = phoneAway();
+          if (!config && (inBackground || (!this.quietRetried && pausedDrop()))) {
+            if (!inBackground) { this.quietRetried = true; this.waitForTurn = true; }
+            const wait = inBackground ? BACKOFF[Math.min(this.awayTries++, BACKOFF.length - 1)] * 1000 : 300;
+            this.setStatus('connecting', 'Reconnecting…', 0, now() + wait);
+            await sleep(wait, ac.signal);
+            if (ac.signal.aborted) attempt = 0;
+            continue;
+          }
+
           attempt++;
           lastReason = reason;
           lastConfig = config;
@@ -867,10 +1090,13 @@
           const verb = this.everHealthy ? 'reconnect' : 'connect';
 
           if (attempt > tries) {
-            // Out of tries: wait for Reconnect (chat page banner), a settings change or the device coming back online.
+            // Out of tries: wait for Reconnect (chat page banner), a settings change or the device coming back online (or
+            // the page coming back on screen, when it gave up while hidden).
+            this.stoppedAway = document.hidden;
             this.setStatus('stopped', reason, tries);
             if (!leaving) this.note('error', 'connection-stopped', `stopped trying to ${verb} after ${tries} tries (${reason}). Press Reconnect at the top of the chat page to try again.`);
             await sleep(1e9, ac.signal);
+            this.stoppedAway = false;
             attempt = 0;
             continue;
           }
@@ -938,7 +1164,7 @@
   }
 
   // Reconnect everything right away when the device comes back online.
-  window.addEventListener('online', () => connectors.forEach(c => c.restart()));
+  window.addEventListener('online', () => connectors.forEach(c => { c.waitForTurn = true; c.restart(); }));
 
   function start() {
     if (started) return;
@@ -953,6 +1179,7 @@
     registerConnector,
     avatarLookup,
     runSocketIo,
+    watchResume,
 
     /** Same shape as the desktop app's WebSocket client: handlers get hello/event/status/... messages. */
     connect(role, handlers) {
@@ -972,6 +1199,7 @@
           pins: state.pins.slice(),
           acked: [...state.done.keys()],
           ackedAt: [...state.done],
+          away: catchingUp() ? { from: away.from, back: away.back } : null, // reopened after time away: the chat page shows what was missed
         });
         start();
       });

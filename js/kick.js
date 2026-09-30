@@ -4,7 +4,7 @@
    recognise are listed in Settings → Diagnostics. */
 (function () {
   'use strict';
-  const { hub, ConnectorError, registerConnector, avatarLookup } = window.UniChatHub;
+  const { hub, ConnectorError, registerConnector, avatarLookup, watchResume } = window.UniChatHub;
 
   // Kick's public Pusher app key (the one kick.com's own chat page uses). If Kick ever changes it, update it here.
   const PUSHER_URL = 'wss://ws-us2.pusher.com/app/32cbd69e4b950bf97679?protocol=7&client=js&version=8.4.0&flash=false';
@@ -99,19 +99,25 @@
       });
     }
 
-    return function handle(event, data) {
+    /** missed: filled in after a reconnect (see catchUp). */
+    return function handle(event, data, missed) {
       const name = String(event).replace(/^App\\Events\\/, '');
       const d = obj(data);
       switch (name) {
         case 'ChatMessageEvent': {
-          const meta = obj(d.metadata);
+          let meta = d.metadata;
+          if (typeof meta === 'string') { try { meta = JSON.parse(meta); } catch { meta = null; } } // saved chat sends it as text
+          meta = obj(meta);
           const original = obj(meta.original_message);
           const reply = d.type === 'reply' && meta.original_sender
             ? { id: original.id ? 'kick:' + original.id : null, name: String(obj(meta.original_sender).username || ''), text: stripEmotes(original.content) }
             : null;
+          const ts = Date.parse(d.created_at) || Date.now();
+          if (newest.slug === slug) newest.at = Math.max(newest.at, ts);
+          const kid = typeof d.id === 'string' || typeof d.id === 'number' ? String(d.id).slice(0, 80) : '';
           hub.publish({
-            id: 'kick:' + (d.id || Math.random().toString(36).slice(2)),
-            platform: 'kick', kind: 'chat', ts: Date.parse(d.created_at) || Date.now(),
+            id: 'kick:' + (kid || Math.random().toString(36).slice(2)),
+            platform: 'kick', kind: 'chat', ts, missed: missed || undefined,
             user: buildUser(d.sender, slug), parts: buildParts(d.content), reply,
           });
           break;
@@ -235,6 +241,26 @@
     } catch { /* next check will try again */ }
   }
 
+  // ---------- Catching up after a reconnect ----------
+  // Kick's feed doesn't resend chat you missed while disconnected, but kick.com shows a channel's last 25 messages, so
+  // after reconnecting UniChat adds the ones newer than the newest it had (quietly: no sounds or popups). Messages it
+  // already showed are skipped (hub.js ignores IDs it has seen).
+  const newest = { slug: '', at: 0 }; // time of the newest message shown from this channel
+  async function catchUp(slug, channelId, signal) {
+    if (newest.slug !== slug) { newest.slug = slug; newest.at = hub.latest('kick'); } // after a reload: the saved chat
+    const since = newest.at;
+    if (!since || !channelId) return [];
+    const res = await fetch(`https://kick.com/api/v2/channels/${encodeURIComponent(channelId)}/messages`, { credentials: 'omit', signal });
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    const raw = await res.text();
+    if (raw.length > 2000000) throw new Error('answer too big'); // 25 messages are ~25 KB
+    const list = obj(obj(JSON.parse(raw)).data).messages;
+    return (Array.isArray(list) ? list : []).map(obj)
+      .filter(m => (Date.parse(m.created_at) || 0) > since && Date.now() - Date.parse(m.created_at) < 6 * 3600000)
+      .sort((a, b) => Date.parse(a.created_at) - Date.parse(b.created_at));
+  }
+  let catchUpReported = false;
+
   // Pusher close codes 4000–4099 mean "don't reconnect unchanged" (e.g. 4001: Kick changed its app key).
   const closeError = ev => (ev.code >= 4000 && ev.code < 4100
     ? new ConnectorError(`Kick's chat server refused the connection (${ev.code}${ev.reason ? ': ' + ev.reason : ''}). UniChat may need an update.`, { config: true })
@@ -262,6 +288,7 @@
         let finished = false;
         let lastData = Date.now();
         let pingTimer = null;
+        let held = null; // chat events waiting for the missed chat to be filled in first
         const liveTimer = setInterval(() => checkLive(slug, ctx, signal), 120000);
 
         function finish(err) {
@@ -273,6 +300,9 @@
           if (err) reject(err); else resolve();
         }
         signal.addEventListener('abort', () => finish(), { once: true });
+        // Back from the background: Kick answers a ping at once if the connection survived.
+        watchResume(ctx, { lastData: () => lastData, waitMs: 8000, fail: finish,
+          ping: () => { if (ws.readyState === WebSocket.OPEN) ws.send('{"event":"pusher:ping","data":{}}'); } });
 
         ws.onmessage = ev => {
           lastData = Date.now();
@@ -292,7 +322,27 @@
               break;
             }
             case 'pusher_internal:subscription_succeeded':
-              if (msg.channel === chatChannel) ctx.connected(`kick.com/${slug}`);
+              if (msg.channel === chatChannel) {
+                ctx.connected(`kick.com/${slug}`);
+                // New lines wait while the missed ones load (5 s at most), so everything shows in order.
+                held = [];
+                const give = new AbortController();
+                const giveUp = setTimeout(() => give.abort(), 5000);
+                signal.addEventListener('abort', () => give.abort(), { once: true });
+                catchUp(slug, ids.channel, give.signal)
+                  .then(list => { if (!finished) list.forEach(m => { try { handle('ChatMessageEvent', m, true); } catch (err) { console.warn('UniChat: skipped a missed Kick message', err); } }); })
+                  .catch(err => {
+                    if (finished || catchUpReported) return;
+                    catchUpReported = true; // once per page
+                    hub.diagnostic(`Kick: couldn't fill in missed chat (${err.name === 'AbortError' ? 'no answer in 5 s' : err.message})`);
+                  })
+                  .finally(() => {
+                    clearTimeout(giveUp);
+                    const waiting = held || [];
+                    held = null;
+                    if (!finished) waiting.forEach(([ev, data]) => { try { handle(ev, data); } catch (err) { console.warn('UniChat: skipped a Kick message', err); } });
+                  });
+              }
               break;
             case 'pusher:error':
               hub.diagnostic(`Kick: server said ${JSON.stringify(data)}`);
@@ -303,6 +353,7 @@
             case 'pusher:pong':
               break;
             default:
+              if (held) { held.push([msg.event, data]); break; } // missed chat is loading (see above)
               try { handle(msg.event, data); } catch (err) { console.warn('UniChat: skipped a Kick message', err); }
           }
         };

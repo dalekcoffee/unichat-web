@@ -83,13 +83,8 @@
   const isAlert = e => U.ALERT_KINDS.includes(e.kind);
   const maxMessages = () => (settings && settings.display && settings.display.maxMessages) || 300;
   const byId = id => `[data-id="${CSS.escape(id)}"]`;
-
-  /** Same rule the server uses to collect questions. */
-  function isQuestion(e) {
-    if (e.kind !== 'chat' || e.historical || e.code === 'test' || (e.user && (e.user.roles || []).includes('broadcaster'))) return false;
-    const text = (e.parts || []).filter(p => p.t === 'text').map(p => p.v).join('').trim();
-    return text.length >= 8 && text.includes('?') && !text.startsWith('!');
-  }
+  /** Quiet one-line notes (TikTok joins, likes, shares): not chatting. */
+  const isNote = e => e.kind === 'chat' && e.silent === true && !!e.title && !(e.parts || []).some(p => String(p.v == null ? '' : p.v).trim());
 
   // ---------- Settings ----------
   function applySettings(s) {
@@ -105,6 +100,7 @@
     document.body.classList.toggle('no-platform-colors', d.platformColors === false);
     applyLayout();
     updateWakeLock();
+    renderPreviewBtn();
   }
 
   // ---------- Feed ----------
@@ -116,25 +112,58 @@
     if (isAlert(e) && settings && settings.display && settings.display.alertsInChat === false) return null;
     if (cls.hidden) return null;
     const el = U.renderEvent(e, theme, cls);
+    el.dataset.ts = String(e.ts); // missed messages slot in by time (see insertMissed)
     if (e.kind !== 'system' && hidden.has(e.platform)) el.classList.add('hidden');
     if (pins.some(p => p.id === e.id)) el.classList.add('pinned');
     return el;
   }
 
-  function add(e, live) {
-    events.push(e);
+  /** question: the hub put it in its Questions list (the panel follows the hub's list exactly). */
+  function add(e, live, question) {
+    if (live) receivedAt.set(e, Date.now());
+    if (live && e.missed) {
+      // Sent while you were away: in the model and on screen by time, not at the end.
+      let i = events.length;
+      while (i > 0 && events[i - 1].ts > e.ts) i--;
+      events.splice(i, 0, e);
+    } else events.push(e);
     if (events.length > maxMessages()) events.splice(0, events.length - maxMessages());
     if (live && isAlert(e)) addToPanelList(alerts, e, 'alerts');
-    if (live && isQuestion(e)) addToPanelList(questions, e, 'questions');
+    if (live && question) addToPanelList(questions, e, 'questions');
 
     const cls = U.classify(e, settings);
     const el = feedElement(e, cls);
-    if (el) queueLine(el, live);
+    if (el && live && e.missed) insertMissed(el, e);
+    else if (el) queueLine(el, live);
 
-    if (!live || cls.hidden) return;
-    if (soundOn) U.Sound.forEvent(e, settings, cls);
+    // Chat filled in after a reconnect (missed while away) is old news: no sounds, popups, voice or nudge.
+    if (!live || cls.hidden || e.missed) return;
+    const nudged = quietChatNudge(e, cls);
+    if (soundOn && !nudged) U.Sound.forEvent(e, settings, cls);
     maybePopup(e);
     if (soundOn && U.Sound.unlocked()) U.Speech.forEvent(e, settings, cls);
+  }
+
+  // ---------- Nudge for the first chat message after a quiet spell ----------
+  // When nobody has chatted for Settings → Sounds → "quiet for" seconds, the next message vibrates the phone (browsers
+  // that allow it: Chrome on Android, not Firefox or iPhones) and/or plays its own sound in place of the usual chat
+  // sound. Messages after it are normal again, until chat goes quiet once more. Your own messages restart the count.
+  let lastChatAt = Date.now();
+  function quietChatNudge(e, cls) {
+    if (e.kind !== 'chat' || isNote(e)) return false;
+    const q = settings && settings.alerts && settings.alerts.quietChat;
+    const t = Date.now();
+    const quietFor = t - lastChatAt;
+    lastChatAt = t;
+    if (!q || quietFor < q.afterSec * 1000 || (e.user && (e.user.roles || []).includes('broadcaster'))) return false;
+    // Browsers only let a page vibrate after it has been tapped once.
+    const tapped = !navigator.userActivation || navigator.userActivation.hasBeenActive;
+    if (q.vibrate && tapped && typeof navigator.vibrate === 'function') { try { navigator.vibrate([150, 90, 150]); } catch { /* not allowed */ } }
+    // A highlighted message (mention, first-time chatter) keeps its highlight sound.
+    const highlighted = cls.highlight && settings.highlights && settings.highlights.sound;
+    if (!q.sound || highlighted || !soundOn || !U.Sound.unlocked()) return false;
+    U.Sound.play(q.soundName, q.volume);
+    return true;
   }
 
   // New lines join the chat in batches, once per screen frame: a flood of messages (e.g. a bot raid) then costs one
@@ -169,9 +198,15 @@
     if (stick) scrollToBottom();
     else if (fresh) {
       unseen += fresh;
-      jump.textContent = `↓ ${unseen} new message${unseen === 1 ? '' : 's'}`;
-      jump.classList.remove('hidden');
+      showJump();
     }
+  }
+
+  /** The "jump to the newest" button: "↓ 3 new messages", or "↓ Back to live" while reading what you missed. */
+  function showJump() {
+    const news = unseen ? `${unseen} new message${unseen === 1 ? '' : 's'}` : '';
+    jump.textContent = readingMissed ? `↓ Back to live${news ? ` · ${news}` : ''}` : `↓ ${news}`;
+    jump.classList.remove('hidden');
   }
 
   function trim() {
@@ -196,6 +231,7 @@
     feed.appendChild(frag);
     empty.classList.toggle('hidden', feed.getElementsByClassName('msg').length > 0);
     trim();
+    reapplyMissed();
     scrollToBottom();
   }
 
@@ -209,11 +245,152 @@
   ['wheel', 'touchmove', 'pointerdown'].forEach(t => feed.addEventListener(t, userScrolling, { passive: true }));
   document.addEventListener('keydown', userScrolling, { passive: true });
   feed.addEventListener('scroll', () => {
-    if (nearBottom()) { followNewest = true; unseen = 0; jump.classList.add('hidden'); }
+    if (nearBottom()) { followNewest = true; readingMissed = false; unseen = 0; jump.classList.add('hidden'); }
     else if (Date.now() - userScrollAt < 1500) followNewest = false;
   }, { passive: true });
   if ('ResizeObserver' in window) new ResizeObserver(() => { if (followNewest) scrollToBottom(); }).observe(feed);
-  jump.addEventListener('click', () => { scrollToBottom(); unseen = 0; jump.classList.add('hidden'); });
+  jump.addEventListener('click', () => { readingMissed = false; scrollToBottom(); unseen = 0; jump.classList.add('hidden'); });
+
+  // ---------- While you were away ----------
+  // After time away (another app, screen off, a reload or reopening the app), messages sent meanwhile slot into the chat
+  // by the time they were sent, between a "While you were away" line (how long, how many, from where) and a "Back live"
+  // line, highlighted for Settings → Display → "Highlight messages missed while away" seconds. The two lines stay until
+  // the next time away; nothing shows when nothing was missed. If what you missed doesn't fit on screen, the chat opens
+  // at the "While you were away" line so you can read on, with "↓ Back to live" to skip to the newest.
+  const NO_CATCH_UP = ['velora', 'blaze', 'nimo']; // platforms that can't send chat from while you were away
+  const ALERT_WORDS = { follow: 'follow', donation: 'donation', sub: 'sub', raid: 'raid', redemption: 'redemption' };
+  let awayView = null;       // { from, back, ids: Set of lines in the missed section, divider, marker }
+  let readingMissed = false; // the chat opened at the "While you were away" line
+  const missedAt = new Map(); // id → when it was shown as missed (the highlight's time runs from then)
+  const receivedAt = new WeakMap(); // event → when this page got it (by this device's clock, like the time away)
+  const receivedWhileAway = e => { const t = receivedAt.get(e); return !!awayView && t >= awayView.from && t < awayView.back; };
+  // In the section: lines that came in while the page was hidden, and missed ones filled in during the minute after
+  // coming back. Later catch-ups (e.g. a connection blip) are highlighted where they belong, without a section.
+  const inAwaySection = e => !!awayView && e.kind !== 'system' && !isNote(e) && (receivedWhileAway(e)
+    || (e.missed === true && receivedAt.get(e) >= awayView.back && Date.now() - awayView.back < 60000));
+  const lineFor = id => feed.querySelector(`.msg${byId(id)}`);
+  const highlightMs = () => Math.max(0, Number(settings && settings.display && settings.display.missedHighlightSec) || 0) * 1000;
+
+  function beginAway(a) {
+    flushLines();
+    endAway();
+    awayView = { from: Number(a.from) || 0, back: Number(a.back) || Date.now(), ids: new Set(), divider: null, marker: null };
+    // Lines that came in while the page was hidden (a phone can keep it running for a while) were missed too.
+    for (const e of events) {
+      if (receivedWhileAway(e) && inAwaySection(e)) { const el = lineFor(e.id); if (el) markMissed(el, e); }
+    }
+    placeAway();
+    landAfterAway();
+  }
+
+  /** The previous time away: its lines go and its highlights end. */
+  function endAway() {
+    if (awayView) { if (awayView.divider) awayView.divider.remove(); if (awayView.marker) awayView.marker.remove(); }
+    awayView = null;
+    if (readingMissed) { readingMissed = false; if (unseen) showJump(); else jump.classList.add('hidden'); }
+    missedAt.clear();
+    feed.querySelectorAll('.msg.missed, .msg.in-away').forEach(m => m.classList.remove('missed', 'missed-fading', 'in-away'));
+  }
+
+  function markMissed(el, e) {
+    if (!missedAt.has(e.id)) missedAt.set(e.id, Date.now());
+    el.classList.add('missed');
+    if (inAwaySection(e)) { el.classList.add('in-away'); awayView.ids.add(e.id); }
+    const ms = highlightMs();
+    if (ms) setTimeout(() => fadeMissed(el), Math.max(0, missedAt.get(e.id) + ms - Date.now()));
+  }
+  function fadeMissed(el) {
+    if (!el.classList.contains('missed') || el.classList.contains('missed-fading')) return;
+    el.classList.add('missed-fading');
+    setTimeout(() => el.classList.remove('missed', 'missed-fading'), 1600);
+  }
+
+  /** After the chat is redrawn (settings, clear): its missed section and highlights come back. */
+  function reapplyMissed() {
+    const ms = highlightMs();
+    for (const [id, at] of missedAt) {
+      const el = lineFor(id);
+      if (!el) continue;
+      if (awayView && awayView.ids.has(id)) el.classList.add('in-away');
+      if (!ms || Date.now() - at < ms) { el.classList.add('missed'); if (ms) setTimeout(() => fadeMissed(el), at + ms - Date.now()); }
+    }
+    placeAway();
+  }
+
+  /** A missed message arriving late: into the chat at the time it was sent (above "Back live" if sent before you came back). */
+  function insertMissed(el, e) {
+    flushLines();
+    empty.classList.add('hidden');
+    const stick = followNewest || nearBottom();
+    const lines = feed.getElementsByClassName('msg');
+    let before = null;
+    for (let i = lines.length - 1; i >= 0; i--) {
+      if (Number(lines[i].dataset.ts) <= e.ts) break;
+      before = lines[i];
+    }
+    const marker = awayView && awayView.marker && awayView.marker.isConnected ? awayView.marker : null;
+    if (marker && e.ts < awayView.back && (!before || (marker.compareDocumentPosition(before) & Node.DOCUMENT_POSITION_FOLLOWING))) before = marker;
+    // Something added above what you're reading pushes it down; the view moves with it so the page stays still.
+    const above = !stick && before && before.getBoundingClientRect().top < feed.getBoundingClientRect().top;
+    feed.insertBefore(el, before);
+    markMissed(el, e);
+    placeAway();
+    if (above) feed.scrollTop += el.getBoundingClientRect().height;
+    trim();
+    if (!landAfterAway() && stick) scrollToBottom();
+  }
+
+  /** The "While you were away" and "Back live" lines around the missed section (none while nothing was missed). */
+  function placeAway() {
+    const a = awayView;
+    if (!a) return;
+    const lines = feed.querySelectorAll('.msg.in-away');
+    if (!lines.length) { if (a.divider) a.divider.remove(); if (a.marker) a.marker.remove(); return; }
+    if (!a.divider) {
+      a.divider = document.createElement('div');
+      a.divider.className = 'away-divider';
+      a.divider.setAttribute('role', 'separator');
+    }
+    if (!a.marker) {
+      a.marker = document.createElement('div');
+      a.marker.className = 'away-marker';
+      a.marker.setAttribute('role', 'separator');
+      a.marker.innerHTML = `<span>Back live · ${U.esc(U.fmtTime(a.back))}</span>`;
+    }
+    feed.insertBefore(a.divider, lines[0]);
+    lines[lines.length - 1].after(a.marker);
+    const missed = events.filter(e => a.ids.has(e.id));
+    const byPlatform = new Map();
+    const byKind = new Map();
+    for (const e of missed) {
+      byPlatform.set(e.platform, (byPlatform.get(e.platform) || 0) + 1);
+      if (Object.prototype.hasOwnProperty.call(ALERT_WORDS, e.kind)) byKind.set(e.kind, (byKind.get(e.kind) || 0) + 1);
+    }
+    const secs = Math.max(1, Math.round((a.back - a.from) / 1000));
+    const time = secs < 60 ? `${secs}s` : secs < 3600 ? `${Math.floor(secs / 60)}m ${String(secs % 60).padStart(2, '0')}s` : U.fmtDuration(secs * 1000);
+    const chips = [...byPlatform].sort((x, y) => U.PLATFORMS.indexOf(x[0]) - U.PLATFORMS.indexOf(y[0]))
+      .map(([p, n]) => `<span title="${U.esc(U.NAMES[p] || p)}">${U.icon(p)}${n}</span>`)
+      .concat([...byKind].map(([k, n]) => `<span>${U.KIND_EMOJI[k] || ''} ${n} ${ALERT_WORDS[k]}${n === 1 ? '' : 's'}</span>`));
+    const cant = statuses.filter(s => NO_CATCH_UP.includes(s.platform) && !['disabled', 'setup'].includes(s.state)).map(s => s.label);
+    if (cant.length) chips.push(`<span class="ad-none">${U.esc(cant.length > 1 ? `${cant.slice(0, -1).join(', ')} and ${cant[cant.length - 1]}` : cant[0])} can't fill in</span>`);
+    a.divider.innerHTML = `<div class="ad-line"><span>While you were away · ${U.esc(time)} · ${missed.length} missed</span></div><div class="ad-chips">${chips.join('')}</div>`;
+  }
+
+  /**
+   * Right after coming back (until you scroll yourself): if what you missed doesn't fit on screen, open at the "While you
+   * were away" line; otherwise stay at the newest. True when it moved the view.
+   */
+  function landAfterAway() {
+    const a = awayView;
+    if (!a || !a.divider || !a.divider.isConnected || Date.now() - a.back > 60000 || userScrollAt > a.back) return false;
+    const top = a.divider.getBoundingClientRect().top - feed.getBoundingClientRect().top + feed.scrollTop;
+    if (feed.scrollHeight - top <= feed.clientHeight) return false;
+    followNewest = false;
+    readingMissed = true;
+    feed.scrollTop = Math.max(0, top - 4);
+    showJump();
+    return true;
+  }
 
   /** A line leaving the chat: it folds away when it's on screen; off screen it just goes, keeping your reading position. */
   function removeLine(el) {
@@ -226,12 +403,16 @@
       if (above) feed.scrollTop -= r.height;
       return;
     }
+    // Fades out first, then the space closes up, so the lines below slide up gently.
     const cs = getComputedStyle(el);
+    const full = { height: `${r.height}px`, paddingTop: cs.paddingTop, paddingBottom: cs.paddingBottom, marginTop: cs.marginTop, marginBottom: cs.marginBottom };
     el.style.pointerEvents = 'none';
+    el.style.overflow = 'hidden';
     el.animate([
-      { opacity: 1, height: `${r.height}px`, paddingTop: cs.paddingTop, paddingBottom: cs.paddingBottom, marginTop: cs.marginTop, marginBottom: cs.marginBottom },
-      { opacity: 0, height: '0px', paddingTop: '0px', paddingBottom: '0px', marginTop: '0px', marginBottom: '0px' },
-    ], { duration: 300, easing: 'ease-in-out' }).onfinish = done;
+      Object.assign({ opacity: 1, offset: 0 }, full),
+      Object.assign({ opacity: 0, offset: 0.5 }, full),
+      { opacity: 0, height: '0px', paddingTop: '0px', paddingBottom: '0px', marginTop: '0px', marginBottom: '0px', offset: 1 },
+    ], { duration: 600, easing: 'ease-in-out' }).onfinish = done;
   }
 
   // Clicks inside the feed: dismiss and pin buttons, reply jumps, names (viewer card).
@@ -322,36 +503,43 @@
 
   function renderPanel() {
     document.querySelectorAll('.panel-tabs [data-tab]').forEach(b => b.classList.toggle('active', b.dataset.tab === panelTab));
-    $('#ackAll').classList.toggle('hidden', panelTab === 'recap');
+    renderClearBtn();
     if (panelTab === 'recap') { renderRecap(); updateCounts(); return; }
     const list =listFor(panelTab).filter(e => panelTab !== 'questions' || !U.classify(e, settings).hidden);
     panelList.innerHTML = list.length ? '' : `<div class="none">${PANEL_EMPTY[panelTab]}</div>`;
     const frag = document.createDocumentFragment();
     for (let i = list.length - 1; i >= 0; i--) frag.appendChild(panelItem(list[i], panelTab));
     panelList.appendChild(frag);
-    $('#ackAll').textContent = panelTab === 'pins' ? '✕ All' : '✓ All';
-    $('#ackAll').title = panelTab === 'pins' ? 'Unpin everything' : panelTab === 'alerts' ? 'Mark every alert as thanked' : 'Mark every question as answered';
     updateCounts();
   }
 
+  const PANEL_MAX = { alerts: 200, questions: 100 }; // the same limits as the hub's lists
+
   function addToPanelList(list, e, tab) {
+    if (list.some(x => x.id === e.id)) return; // never the same item twice (a tick would only reach one of them)
     list.push(e);
-    if (list.length > 200) list.shift();
+    if (list.length > PANEL_MAX[tab]) {
+      const gone = list.shift();
+      done.delete(gone.id);
+      const el = panelTab === tab && panelList.querySelector(`.ap-item${byId(gone.id)}`);
+      if (el) el.remove();
+    }
     if (tab === panelTab && !(tab === 'questions' && U.classify(e, settings).hidden)) {
       const placeholder = panelList.querySelector('.none');
       if (placeholder) placeholder.remove();
       panelList.prepend(panelItem(e, tab));
-      while (panelList.children.length > 200) panelList.lastElementChild.remove();
     }
     updateCounts();
   }
+
+  /** Every panel element showing this item (normally one). */
+  const panelEls = id => (panelTab === 'pins' ? [] : Array.from(panelList.querySelectorAll(`.ap-item${byId(id)}`)));
 
   function markDone(ids, at) {
     ids.forEach(id => {
       if (done.has(id)) return;
       done.set(id, at || Date.now());
-      const el = panelTab !== 'pins' && panelList.querySelector(`.ap-item${byId(id)}`);
-      if (el) paintDone(el, panelTab);
+      panelEls(id).forEach(el => paintDone(el, panelTab));
     });
     updateCounts();
   }
@@ -359,8 +547,7 @@
   function unmarkDone(ids) {
     ids.forEach(id => {
       if (!done.delete(id)) return;
-      const el = panelTab !== 'pins' && panelList.querySelector(`.ap-item${byId(id)}`);
-      if (el) paintDone(el, panelTab);
+      panelEls(id).forEach(el => paintDone(el, panelTab));
     });
     updateCounts();
   }
@@ -372,8 +559,7 @@
     questions = questions.filter(e => !gone.has(e.id));
     gone.forEach(id => {
       done.delete(id);
-      const el = panelTab !== 'pins' && panelList.querySelector(`.ap-item${byId(id)}`);
-      if (el) fadeAway(el);
+      panelEls(id).forEach(fadeAway);
     });
     updateCounts();
   }
@@ -520,12 +706,59 @@
     return ok ? Promise.resolve() : Promise.reject(new Error('copy failed'));
   }
 
-  $('#ackAll').addEventListener('click', () => {
-    if (!conn || panelTab === 'recap') return;
-    if (panelTab === 'pins') { pins.forEach(p => conn.send({ type: 'unpin', id: p.id })); return; }
-    const ids = listFor(panelTab).map(x => x.id).filter(id => !done.has(id));
-    markDone(ids);
-    if (ids.length) conn.send({ type: 'ack', ids });
+  // ---------- Clear: one tap clears this tab; a second tap within 5 seconds clears every tab ----------
+  // Clearing alerts and questions ticks them (thanked / answered), so they fade out after the usual "Clear thanked &
+  // answered after" time; pins are unpinned and the recap starts over, both fading out first.
+  const clearBtn = $('#ackAll');
+  const CLEAR_ALL_MS = 5000;
+  const TAB_NAMES = { alerts: 'Alerts', questions: 'Questions', pins: 'Pinned', recap: 'Recap' };
+  let clearArmed = null; // timer while a second tap would clear every tab
+
+  function renderClearBtn() {
+    clearBtn.classList.toggle('armed', !!clearArmed);
+    clearBtn.innerHTML = clearArmed ? '<span>✓✓ All tabs</span>' : '<span>✓ Clear</span>';
+    clearBtn.title = clearArmed ? 'Tap again to clear every tab: Alerts, Questions, Pinned and Recap'
+      : `Clear ${TAB_NAMES[panelTab]}${panelTab === 'alerts' ? ' (marks them thanked)' : panelTab === 'questions' ? ' (marks them answered)' : ''}. Tap twice to clear every tab.`;
+    clearBtn.setAttribute('aria-label', clearBtn.title);
+  }
+
+  /** Clears one tab; returns how many things it cleared. */
+  function clearTab(tab) {
+    if (!conn) return 0;
+    if (tab === 'alerts' || tab === 'questions') {
+      const ids = listFor(tab).map(x => x.id).filter(id => !done.has(id));
+      if (ids.length) { markDone(ids); conn.send({ type: 'ack', ids }); }
+      return ids.length;
+    }
+    if (tab === 'pins') {
+      const n = pins.length;
+      if (!n) return 0;
+      if (panelTab === 'pins') {
+        panelList.querySelectorAll('.ap-item').forEach(fadeAway);
+        setTimeout(() => conn.send({ type: 'unpinAll' }), 420); // once they've faded out
+      } else conn.send({ type: 'unpinAll' });
+      return n;
+    }
+    const n = window.UniChatHub.recap().items.length;
+    if (!n) return 0;
+    const shown = panelTab === 'recap' && panelList.querySelector('.recap');
+    if (shown) shown.classList.add('clearing'); // fades out; the fresh recap is drawn when the hub says it changed
+    conn.send({ type: 'recapReset' });
+    return n;
+  }
+
+  clearBtn.addEventListener('click', () => {
+    if (clearArmed) {
+      clearTimeout(clearArmed);
+      clearArmed = null;
+      const n = ['alerts', 'questions', 'pins', 'recap'].reduce((sum, tab) => sum + clearTab(tab), 0);
+      showToast(n ? 'Cleared every tab' : 'Every tab was already clear');
+    } else {
+      const n = clearTab(panelTab);
+      clearArmed = setTimeout(() => { clearArmed = null; renderClearBtn(); }, CLEAR_ALL_MS);
+      showToast(`${n ? `${TAB_NAMES[panelTab]} cleared` : `Nothing to clear in ${TAB_NAMES[panelTab]}`} · tap again to clear every tab`);
+    }
+    renderClearBtn();
   });
 
   document.querySelectorAll('.panel-tabs [data-tab]').forEach(b => b.addEventListener('click', () => {
@@ -750,6 +983,62 @@
   $('#aboutClose').addEventListener('click', closeAbout);
   aboutLayer.addEventListener('click', e => { if (e.target === aboutLayer) closeAbout(); });
 
+  // ---------- Stream preview: your stream in a popup, from Beam's player ----------
+  // The player only exists while the popup is open and the page is on screen: closing it (or switching away) removes
+  // it, so nothing streams in the background. TikTok LIVE can't be shown inside other sites, so Beam is the one player.
+  const previewLayer = $('#previewLayer');
+  const previewBtn = $('#previewBtn');
+  const previewFrame = $('#previewFrame');
+  let previewOpen = false;
+  const beamName = () => (settings && settings.preview && settings.preview.beam) || '';
+  const previewOn = () => !!(settings && settings.preview && settings.preview.enabled && beamName());
+
+  function loadPlayer() {
+    const name = beamName();
+    if (!name || previewFrame.querySelector('iframe')) return;
+    const f = document.createElement('iframe');
+    f.src = `https://beamstream.gg/${encodeURIComponent(name)}/embed`;
+    f.title = `${name} on Beam`;
+    f.allow = 'autoplay; fullscreen; picture-in-picture';
+    f.setAttribute('allowfullscreen', '');
+    // Beam's player may run its own scripts in its own frame, but can't navigate or reach this page.
+    f.setAttribute('sandbox', 'allow-scripts allow-same-origin allow-presentation');
+    previewFrame.replaceChildren(f);
+  }
+  function unloadPlayer() { previewFrame.replaceChildren(); }
+
+  function openPreview() {
+    if (!previewOn()) return;
+    const name = beamName();
+    $('#previewSrc').textContent = `Beam · ${name}`;
+    $('#previewOpen').href = `https://beamstream.gg/${encodeURIComponent(name)}`;
+    previewOpen = true;
+    previewLayer.classList.remove('hidden');
+    previewBtn.classList.add('active');
+    loadPlayer();
+    $('#previewClose').focus();
+  }
+  function closePreview() {
+    if (!previewOpen) return;
+    previewOpen = false;
+    unloadPlayer();
+    previewLayer.classList.add('hidden');
+    previewBtn.classList.remove('active');
+    previewBtn.focus();
+  }
+  function renderPreviewBtn() {
+    previewBtn.classList.toggle('hidden', !previewOn());
+    if (!previewOn()) closePreview();
+  }
+  previewBtn.addEventListener('click', () => (previewOpen ? closePreview() : openPreview()));
+  $('#previewClose').addEventListener('click', closePreview);
+  previewLayer.addEventListener('click', e => { if (e.target === previewLayer) closePreview(); });
+  // Hidden page (another app or tab): the player goes; it comes back when you do, if the popup is still open.
+  document.addEventListener('visibilitychange', () => {
+    if (!previewOpen) return;
+    if (document.hidden) unloadPlayer(); else loadPlayer();
+  });
+
   // ---------- Profile pictures arriving after the message ----------
   function applyAvatar(platform, login, url) {
     const safe = U.safeUrl(url);
@@ -825,7 +1114,7 @@
   stopSpeech.addEventListener('click', () => U.Speech.stop());
   setInterval(() => stopSpeech.classList.toggle('hidden', !U.Speech.speaking()), 500);
   document.addEventListener('keydown', e => {
-    if (e.key === 'Escape') { hidePopup(); closeViewerCard(); closeAbout(); closeSoundPrompt(); hideTip(); U.Speech.stop(); }
+    if (e.key === 'Escape') { hidePopup(); closeViewerCard(); closeAbout(); closePreview(); closeSoundPrompt(); hideTip(); U.Speech.stop(); }
   });
 
   // ---------- Status pills & banners ----------
@@ -1012,11 +1301,21 @@
     soundPromptClosed = true;
     renderSoundPrompt();
   }
-  $('#soundEnable').addEventListener('click', () => {
+  // A short "sparkle" confirms that sound is really on, each time you turn it on (or a tap lets the browser play it).
+  let chimedAt = 0;
+  function confirmSound() {
+    if (!soundOn || !U.Sound.unlocked() || Date.now() - chimedAt < 2000) return;
+    chimedAt = Date.now();
+    U.Sound.play('builtin:sparkle', 0.6);
+  }
+  /** Turn sound on after a click or tap, with the confirmation sparkle. */
+  function enableSound() {
+    const wasOn = soundOn && U.Sound.unlocked();
     soundOn = true;
     store.set('unichat.sound', true);
-    U.Sound.unlock().then(renderSoundBtn, renderSoundBtn);
-  });
+    U.Sound.unlock().then(() => { if (!wasOn) confirmSound(); renderSoundBtn(); }, renderSoundBtn);
+  }
+  $('#soundEnable').addEventListener('click', enableSound);
   $('#soundMute').addEventListener('click', () => {
     soundOn = false;
     store.set('unichat.sound', false);
@@ -1044,16 +1343,23 @@
 
   soundBtn.addEventListener('click', ev => {
     ev.stopPropagation();
-    if (soundOn && U.Sound.unlocked()) { soundOn = false; U.Speech.stop(); }
-    else soundOn = true;
-    store.set('unichat.sound', soundOn);
-    U.Sound.unlock().then(renderSoundBtn, renderSoundBtn);
-    renderSoundBtn();
+    if (soundOn && U.Sound.unlocked()) {
+      soundOn = false;
+      U.Speech.stop();
+      store.set('unichat.sound', false);
+      renderSoundBtn();
+    } else enableSound();
   });
-  // Any interaction with the page also unlocks audio.
-  ['pointerdown', 'keydown'].forEach(t => document.addEventListener(t, () => {
-    if (soundOn && !U.Sound.unlocked()) U.Sound.unlock().then(renderSoundBtn, renderSoundBtn);
+  // Any interaction with the page also unlocks audio (the sound buttons handle their own clicks).
+  ['pointerdown', 'keydown'].forEach(t => document.addEventListener(t, e => {
+    if (e.target instanceof Element && e.target.closest('#soundBtn, #soundMute')) return;
+    if (soundOn && !U.Sound.unlocked()) U.Sound.unlock().then(() => { confirmSound(); renderSoundBtn(); }, renderSoundBtn);
   }, { passive: true }));
+  // Coming back to the page: browsers may have paused sound in the background; this resumes it where they allow it
+  // without a tap (no sparkle: nothing was turned on).
+  document.addEventListener('visibilitychange', () => {
+    if (!document.hidden && soundOn && !U.Sound.unlocked()) U.Sound.unlock().then(renderSoundBtn, renderSoundBtn);
+  });
   renderSoundBtn();
 
   // ---------- Keep the screen awake (phone/tablet chat monitors) ----------
@@ -1078,6 +1384,13 @@
   // Browsers drop the lock when the tab is hidden, so it's re-requested when visible again.
   document.addEventListener('visibilitychange', updateWakeLock);
 
+  // ---------- Installable app (PWA) ----------
+  // sw.js keeps a copy of the site's own files, so the installed app opens even with a bad connection. It always
+  // prefers the live site, so updates arrive straight away.
+  if ('serviceWorker' in navigator && window.isSecureContext) {
+    navigator.serviceWorker.register('sw.js').catch(err => console.debug('UniChat: offline copy unavailable', err));
+  }
+
   // ---------- Live connection ----------
   conn = U.connect('dashboard', {
     onOpen() { serverDown = null; renderBanners(); },
@@ -1099,9 +1412,13 @@
           renderPanel();
           renderPills();
           renderBanners();
+          if (msg.away) beginAway(msg.away); // reopened after time away: what was missed shows as it arrives
+          break;
+        case 'away': // back on screen after time away
+          if (msg.away) beginAway(msg.away);
           break;
         case 'event':
-          add(msg.event, true);
+          add(msg.event, true, msg.question === true);
           break;
         case 'delete': {
           const ids = new Set(msg.ids || []);
@@ -1161,6 +1478,7 @@
           statuses = msg.status || [];
           renderPills();
           renderBanners();
+          if (awayView) placeAway(); // its "can't fill in" note follows which platforms are on
           break;
         case 'settings':
           applySettings(msg.settings);

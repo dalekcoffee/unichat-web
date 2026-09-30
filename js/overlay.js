@@ -49,7 +49,8 @@
       const remaining = Math.max(1000, fade * 1000 - (live ? 0 : Date.now() - e.ts));
       setTimeout(() => { el.classList.add('gone'); setTimeout(() => el.remove(), 900); }, remaining);
     }
-    if (live && opt.sound) U.Sound.forEvent(e, settings, cls);
+    if (live && opt.sound && !e.missed) U.Sound.forEvent(e, settings, cls); // missed ones (filled in after a reconnect) stay quiet
+
   }
 
   function applySettings(s) {

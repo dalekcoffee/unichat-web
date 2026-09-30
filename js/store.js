@@ -13,8 +13,10 @@
   // This copy of UniChat opens on DalekCoffee's channels, so a new browser only needs the Euler key. A blank name means
   // "use the default"; each platform's switch in Settings turns it off.
   const DEFAULTS = {
-    twitch: { enabled: true, channel: 'dalekcoffee' },
+    twitch: { enabled: true, channel: 'dalekcoffee',
+      catchUp: true }, // after a reconnect, fill in chat missed meanwhile (from recent-messages.robotty.de, see twitch.js)
     tikTok: { enabled: true, username: 'dalekcoffee', eulerKey: '', minGiftCoinsForSound: 0, showLikes: true, showShares: true, showJoins: true,
+      joinsClearSec: 5, // "joined" lines leave the chat after this long (0 = keep them)
       useRelay: false }, // experimental: read TikTok through your own Cloudflare relay (RELAY_URL below) instead of from this browser
     kick: { enabled: true, channel: 'dalekcoffee', chatroomId: 0 }, // chatroomId: only when kick.com blocks the automatic lookup
     velora: { enabled: true, channel: 'dalek' },
@@ -37,6 +39,9 @@
       soundOnConnectionStopped: true, // a platform ran out of reconnect tries (needs Reconnect)
       connectionStoppedSound: 'builtin:failed',
       connectionStoppedVolume: 0.7,
+      // The first chat message after chat has been quiet for afterSec: vibrate the phone (where the browser can) and/or
+      // play this sound instead of the usual chat sound, so it's harder to miss. Later messages are normal again.
+      quietChat: { afterSec: 30, vibrate: true, sound: true, soundName: 'builtin:bell', volume: 0.6 },
     },
     filters: {
       hideCommands: true,
@@ -49,6 +54,9 @@
     },
     highlights: { enabled: true, mentions: true, keywords: [], firstTimeChatters: true, sound: true, soundName: 'builtin:ding', volume: 0.6 },
     popup: { enabled: true, seconds: 6, kinds: { follow: false, donation: true, sub: true, raid: true } },
+    // Stream preview button (chat page top bar): your stream in a popup, from Beam's player (beamstream.gg/<beam>/embed).
+    // Loaded only while the popup is open. TikTok LIVE can't be shown inside other sites, so Beam is the one player.
+    preview: { enabled: true, beam: 'dalek' },
     tts: { enabled: false, kinds: { donation: true, sub: false }, readNames: true, voice: '', rate: 1, volume: 0.9, maxChars: 200 },
     display: {
       fontSize: 16, showTimestamps: true, showAvatars: true, showPlatformIcons: true, showBadges: true,
@@ -59,6 +67,7 @@
       showViewerCounts: false, // viewer counts next to each platform's status dot (off: never shown anywhere)
       thirdPartyEmotes: true, // 7TV, BetterTTV and FrankerFaceZ emotes in chat from every platform
       showGifs: true, // Twitch GIFs (GIPHY); off shows their caption instead and nothing is loaded from GIPHY
+      missedHighlightSec: 15, // messages missed while away stay highlighted this long after they show (0 = until you leave again)
     },
   };
 
@@ -148,14 +157,19 @@
     s.velora.channel = normalizeVelora(s.velora.channel) || DEFAULTS.velora.channel;
     s.blaze.channel = normalizeBlaze(s.blaze.channel) || DEFAULTS.blaze.channel;
     s.nimo.channel = normalizeNimo(s.nimo.channel) || DEFAULTS.nimo.channel;
+    s.preview.beam = normalizeName(s.preview.beam, 'beamstream.gg') || DEFAULTS.preview.beam;
     s.nimo.roomId = Math.round(clamp(s.nimo.roomId, 0, 1e12, 0));
     s.tikTok.eulerKey = String(s.tikTok.eulerKey || '').trim();
     s.display.fontSize = Math.round(clamp(s.display.fontSize, 10, 48, 16));
     s.display.maxMessages = Math.round(clamp(s.display.maxMessages, 50, 2000, 300));
     s.display.overlayFadeSec = Math.round(clamp(s.display.overlayFadeSec, 0, 3600, 30));
     s.display.removeDoneAfterSec = Math.round(clamp(s.display.removeDoneAfterSec, 0, 3600, 30));
+    s.display.missedHighlightSec = Math.round(clamp(s.display.missedHighlightSec, 0, 3600, 15));
     s.popup.seconds = Math.round(clamp(s.popup.seconds, 2, 60, 6));
     s.alerts.chatSoundCooldownSec = clamp(s.alerts.chatSoundCooldownSec, 0, 60, 2);
+    s.alerts.quietChat.afterSec = Math.round(clamp(s.alerts.quietChat.afterSec, 5, 3600, 30));
+    s.alerts.quietChat.volume = clamp(s.alerts.quietChat.volume, 0, 1, 0.6);
+    s.tikTok.joinsClearSec = Math.round(clamp(s.tikTok.joinsClearSec, 0, 3600, 5));
     for (const k of KIND_KEYS.map(n => s.alerts.kinds[n])) {
       k.volume = clamp(k.volume, 0, 1, 0.7);
       for (const p of PLATFORMS) if (typeof k.platforms[p] !== 'boolean') k.platforms[p] = true;
@@ -233,6 +247,7 @@
     if (!validSound(s.alerts.connectionLostSound)) s.alerts.connectionLostSound = 'builtin:error';
     if (!validSound(s.alerts.connectionStoppedSound)) s.alerts.connectionStoppedSound = 'builtin:failed';
     if (!validSound(s.highlights.soundName)) s.highlights.soundName = 'builtin:ding';
+    if (!validSound(s.alerts.quietChat.soundName)) s.alerts.quietChat.soundName = 'builtin:bell';
     s.tts.voice = typeof s.tts.voice === 'string' ? s.tts.voice.slice(0, 200) : '';
     return s;
   }

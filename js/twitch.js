@@ -3,7 +3,7 @@
    plus profile pictures and live status (looked up separately, see below). */
 (function () {
   'use strict';
-  const { hub, ConnectorError, registerConnector, avatarLookup } = window.UniChatHub;
+  const { hub, ConnectorError, registerConnector, avatarLookup, watchResume } = window.UniChatHub;
 
   const EMOTE_URL = id => `https://static-cdn.jtvnw.net/emoticons/v2/${encodeURIComponent(id)}/default/dark/2.0`;
 
@@ -39,6 +39,9 @@
     if (!pieces.length) return null;
     m.command = pieces[0];
     m.params = pieces.slice(1);
+    // In IRC the last parameter only needs the ":" when it has spaces: saved chat (see catchUp) sends one-word messages
+    // as "PRIVMSG #channel LOL".
+    if (m.trailing === null && m.params.length > 1) m.trailing = m.params[m.params.length - 1];
     return m;
   }
 
@@ -135,9 +138,52 @@
   }
 
   const ts = m => Number(m.tags['tmi-sent-ts']) || Date.now();
+
+  // ---------- Catching up after a reconnect ----------
+  // Twitch doesn't resend chat you missed while disconnected (e.g. a phone that paused this page in the background).
+  // recent-messages.robotty.de, a free service that Chatterino and other chat apps use, keeps each channel's recent chat,
+  // so after reconnecting UniChat fills in what was said since the newest message it had. Messages already shown are
+  // skipped (hub.js ignores IDs it has seen); missed ones arrive quietly (no sounds or popups) but still count for the
+  // Alerts panel, Questions and the recap. Settings → Twitch turns this off.
+  const CATCH_UP_URL = (channel, limit) => `https://recent-messages.robotty.de/api/v2/recent-messages/${encodeURIComponent(channel)}?limit=${limit}&hide_moderated_messages=true`;
+  const CATCH_UP_MAX_AGE = 6 * 3600000;
+  const newest = { channel: '', at: 0 }; // tmi-sent-ts of the newest message shown from this channel
+  const noteNewest = (m, channel) => { if (newest.channel === channel) newest.at = Math.max(newest.at, ts(m)); };
+  let catchUpReported = false;
+
+  /** The time to catch up from: the newest message shown from this channel (0 = nothing to fill in). */
+  function catchUpSince(channel) {
+    if (newest.channel !== channel) {
+      // First connection to this channel on this page: start from the newest message still in the chat (a reload keeps it).
+      newest.channel = channel;
+      newest.at = hub.latest('twitch');
+    }
+    return newest.at;
+  }
+
+  async function catchUp(channel, since, signal) {
+    // Asked (for one message) even with nothing to fill in, so the service keeps recording this channel for next time.
+    const res = await fetch(CATCH_UP_URL(channel, since ? 100 : 1), { credentials: 'omit', signal });
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    const raw = await res.text();
+    if (raw.length > 2000000) throw new Error('answer too big'); // 100 lines are ~100 KB
+    const body = JSON.parse(raw);
+    const lines = body && Array.isArray(body.messages) ? body.messages.filter(l => typeof l === 'string').slice(-100) : [];
+    if (!since) return;
+    const oldest = Math.max(since, Date.now() - CATCH_UP_MAX_AGE);
+    for (const line of lines) {
+      if (signal.aborted) return;
+      const m = parseIrc(line.slice(0, 20000));
+      if (!m || (m.command !== 'PRIVMSG' && m.command !== 'USERNOTICE') || m.params[0] !== `#${channel}` || !(ts(m) > oldest)) continue;
+      try { if (m.command === 'PRIVMSG') onPrivMsg(m, channel, true); else onUserNotice(m, channel, true); }
+      catch (err) { console.warn('UniChat: skipped a missed Twitch message', err); }
+    }
+  }
   const stripName = (sys, name) => (name && sys.toLowerCase().startsWith(name.toLowerCase()) ? sys.slice(name.length).trim() : sys);
 
-  function onPrivMsg(m) {
+  /** A chat message; channel: the one being read (for catching up), missed: filled in after a reconnect. */
+  function onPrivMsg(m, channel, missed) {
+    noteNewest(m, channel);
     let text = m.trailing || '';
     if (text.startsWith('\u0001ACTION ') && text.endsWith('\u0001')) text = text.slice(8, -1);
 
@@ -176,15 +222,18 @@
       const value = paid / Math.pow(10, exp);
       Object.assign(e, { kind: 'donation', value, unit: currency || 'money', amount: `${value.toFixed(2)} ${currency}`.trim(), title: 'sent a Hype Chat' });
     }
+    if (missed) e.missed = true;
     hub.publish(e);
   }
 
-  function onUserNotice(m) {
+  function onUserNotice(m, channel, missed) {
+    noteNewest(m, channel);
     const msgId = m.tags['msg-id'] || '';
     const sys = m.tags['system-msg'] || '';
     const user = buildUser(m);
     const base = { id: 'twitch:' + (m.tags.id || Math.random().toString(36).slice(2)), platform: 'twitch', ts: ts(m), user,
       parts: m.trailing ? buildParts(m.trailing, m.tags.emotes) : [] };
+    if (missed) base.missed = true;
 
     switch (msgId) {
       case 'submysterygift':
@@ -230,9 +279,26 @@
       return new Promise((resolve, reject) => {
         const ws = new WebSocket('wss://irc-ws.chat.twitch.tv:443');
         let joined = false;
+        let held = null; // chat lines waiting for the missed chat to be filled in first
+        function handle(m) {
+          try {
+            switch (m.command) {
+              case 'PRIVMSG': onPrivMsg(m, channel); break;
+              case 'USERNOTICE': onUserNotice(m, channel); break;
+              case 'CLEARCHAT': hub.clearUser('twitch', m.trailing || null); break;
+              case 'CLEARMSG': if (m.tags['target-msg-id']) hub.deleteMessages('twitch', ['twitch:' + m.tags['target-msg-id']]); break;
+            }
+          } catch (err) {
+            console.warn('UniChat: skipped a Twitch message', err);
+          }
+        }
         let lastData = Date.now();
         let finished = false;
-        const joinTimer = setTimeout(() => fail(new ConnectorError(`Channel '${channel}' not found on Twitch (check the spelling)`, { config: true })), 15000);
+        // No channel after 15 s: Twitch answered but won't join it (misspelt), or never answered at all (e.g. a phone
+        // waking up on a weak signal), which is just a failed try.
+        const joinTimer = setTimeout(() => fail(ws.readyState === WebSocket.OPEN
+          ? new ConnectorError(`Channel '${channel}' not found on Twitch (check the spelling)`, { config: true })
+          : new ConnectorError("Couldn't reach Twitch chat")), 15000);
         const pingTimer = setInterval(() => {
           if (ws.readyState === WebSocket.OPEN) ws.send('PING :unichat');
           if (Date.now() - lastData > 100000) fail(new ConnectorError('No data for 100s'));
@@ -265,6 +331,8 @@
         }
         const fail = err => finish(err);
         signal.addEventListener('abort', () => finish(), { once: true });
+        // Back from the background: Twitch answers a PING at once if the connection survived.
+        watchResume(ctx, { lastData: () => lastData, waitMs: 8000, fail, ping: () => { if (ws.readyState === WebSocket.OPEN) ws.send('PING :unichat'); } });
 
         ws.onopen = () => {
           ws.send('CAP REQ :twitch.tv/tags twitch.tv/commands');
@@ -290,6 +358,24 @@
                     ctx.connected(`#${channel}`);
                     updateLive();
                     liveTimer = setInterval(updateLive, LIVE_CHECK_MS);
+                    if (s.twitch.catchUp) {
+                      // While the missed chat loads (5 s at most), new lines wait, so everything shows in order.
+                      const since = catchUpSince(channel);
+                      const give = new AbortController();
+                      const giveUp = setTimeout(() => give.abort(), 5000);
+                      liveAbort.signal.addEventListener('abort', () => give.abort(), { once: true });
+                      if (since) held = [];
+                      catchUp(channel, since, give.signal).catch(err => {
+                        if (finished || catchUpReported) return;
+                        catchUpReported = true; // once per page
+                        hub.diagnostic(`Twitch: couldn't fill in missed chat from recent-messages.robotty.de (${err.name === 'AbortError' ? 'no answer in 5 s' : err.message})`);
+                      }).finally(() => {
+                        clearTimeout(giveUp);
+                        const waiting = held || [];
+                        held = null;
+                        if (!finished) waiting.forEach(handle);
+                      });
+                    }
                   }
                   break;
                 case 'NOTICE':
@@ -298,10 +384,9 @@
                     return;
                   }
                   break;
-                case 'PRIVMSG': onPrivMsg(m); break;
-                case 'USERNOTICE': onUserNotice(m); break;
-                case 'CLEARCHAT': hub.clearUser('twitch', m.trailing || null); break;
-                case 'CLEARMSG': if (m.tags['target-msg-id']) hub.deleteMessages('twitch', ['twitch:' + m.tags['target-msg-id']]); break;
+                case 'PRIVMSG': case 'USERNOTICE': case 'CLEARCHAT': case 'CLEARMSG':
+                  if (held) held.push(m); else handle(m); // held while missed chat is filled in (see catchUp)
+                  break;
               }
             } catch (err) {
               console.warn('UniChat: skipped a Twitch message', err);

@@ -4,10 +4,16 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
   <meta name="theme-color" content="#17171f">
-  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' https://static-cdn.jtvnw.net https://tiktokcdn.com https://*.tiktokcdn.com https://tiktokcdn-us.com https://*.tiktokcdn-us.com https://tiktokcdn-eu.com https://*.tiktokcdn-eu.com https://ibyteimg.com https://*.ibyteimg.com https://byteimg.com https://*.byteimg.com https://tiktokv.com https://*.tiktokv.com https://muscdn.com https://*.muscdn.com https://eulerstream.com https://*.eulerstream.com https://kick.com https://*.kick.com https://velora.tv https://*.velora.tv https://blaze.stream https://*.blaze.stream https://nimostatic.tv https://*.nimostatic.tv https://nimo.tv https://*.nimo.tv https://cdn.7tv.app https://cdn.betterttv.net https://*.giphy.com https://dalek.coffee; connect-src 'self' wss://irc-ws.chat.twitch.tv wss://ws.eulerstream.com wss://ws-us2.pusher.com https://kick.com wss://api.velora.tv wss://blaze.stream https://blaze.stream wss://wsapi.nimo.tv wss://wsapi-global.nimo.tv https://api.ivr.fi https://7tv.io https://api.betterttv.net; media-src 'self' data: blob:; font-src 'self'; object-src 'none'; base-uri 'none'; form-action 'none'">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' https://static-cdn.jtvnw.net https://tiktokcdn.com https://*.tiktokcdn.com https://tiktokcdn-us.com https://*.tiktokcdn-us.com https://tiktokcdn-eu.com https://*.tiktokcdn-eu.com https://ibyteimg.com https://*.ibyteimg.com https://byteimg.com https://*.byteimg.com https://tiktokv.com https://*.tiktokv.com https://muscdn.com https://*.muscdn.com https://eulerstream.com https://*.eulerstream.com https://kick.com https://*.kick.com https://velora.tv https://*.velora.tv https://blaze.stream https://*.blaze.stream https://nimostatic.tv https://*.nimostatic.tv https://nimo.tv https://*.nimo.tv https://cdn.7tv.app https://cdn.betterttv.net https://*.giphy.com https://dalek.coffee; connect-src 'self' wss://irc-ws.chat.twitch.tv wss://ws.eulerstream.com wss://ws-us2.pusher.com https://kick.com wss://api.velora.tv wss://blaze.stream https://blaze.stream wss://wsapi.nimo.tv wss://wsapi-global.nimo.tv https://api.ivr.fi https://recent-messages.robotty.de https://7tv.io https://api.betterttv.net; media-src 'self' data: blob:; frame-src https://beamstream.gg; font-src 'self'; object-src 'none'; base-uri 'none'; form-action 'none'">
   <meta name="referrer" content="no-referrer">
   <title>UniChat</title>
   <link rel="icon" href="favicon.ico">
+  <link rel="manifest" href="manifest.webmanifest">
+  <link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-title" content="UniChat">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <link rel="stylesheet" href="css/style.css">
 </head>
 <body class="dashboard">
@@ -20,6 +26,10 @@
         <span>Clear</span>
       </button>
       <button class="iconbtn hidden" id="stopSpeech" type="button" title="Stop reading aloud">⏹ Stop voice</button>
+      <button class="iconbtn" id="previewBtn" type="button" title="Stream preview: watch your stream in a popup" aria-haspopup="dialog" aria-controls="previewLayer">
+        <svg viewBox="0 0 24 24" fill="currentColor"><path d="M21 3H3a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h5v2h8v-2h5a2 2 0 0 0 2-2V5a2 2 0 0 0-2-2Zm0 14H3V5h18v12ZM9.5 7.5v7l6-3.5-6-3.5Z"/></svg>
+        <span>Preview</span>
+      </button>
       <button class="iconbtn" id="aboutBtn" type="button" title="What is UniChat?" aria-haspopup="dialog" aria-controls="aboutLayer">
         <svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 2a10 10 0 1 0 0 20 10 10 0 0 0 0-20Zm1 15h-2v-6h2v6Zm0-8h-2V7h2v2Z"/></svg>
         <span>About</span>
@@ -62,7 +72,7 @@
             <button type="button" data-tab="pins" title="Pinned"><span class="tab-ico" aria-hidden="true">📌</span><span class="tab-label">Pinned</span><span class="count-badge zero" data-count="pins">0</span></button>
             <button type="button" data-tab="recap" title="Stream recap: who to thank"><span class="tab-ico" aria-hidden="true">🏆</span><span class="tab-label">Recap</span></button>
           </div>
-          <button class="btn small" type="button" id="ackAll" title="Mark everything in this list as done">✓ All</button>
+          <button class="btn small clear-btn" type="button" id="ackAll"><span>✓ Clear</span></button>
         </header>
         <div class="alerts-list" id="alertsList"></div>
       </aside>
@@ -105,6 +115,19 @@
         <a class="btn" href="settings.html" data-keep-config>Settings</a>
         <button class="btn primary" type="button" id="aboutClose">Got it</button>
       </div>
+    </div>
+  </div>
+  <div class="modal-layer preview-layer hidden" id="previewLayer">
+    <div class="viewer-card preview-card" role="dialog" aria-modal="true" aria-labelledby="previewTitle">
+      <div class="preview-head">
+        <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M21 3H3a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h5v2h8v-2h5a2 2 0 0 0 2-2V5a2 2 0 0 0-2-2Zm0 14H3V5h18v12ZM9.5 7.5v7l6-3.5-6-3.5Z"/></svg>
+        <h2 id="previewTitle">Stream preview</h2>
+        <span class="preview-src" id="previewSrc"></span>
+        <span class="grow"></span>
+        <a class="btn small" id="previewOpen" href="https://beamstream.gg/" target="_blank" rel="noopener noreferrer" title="Open it in a new tab">Open ↗</a>
+        <button class="x" type="button" id="previewClose" aria-label="Close the preview" title="Close (the player stops loading)">×</button>
+      </div>
+      <div class="preview-frame" id="previewFrame"></div>
     </div>
   </div>
   <div class="modal-layer sound-layer hidden" id="soundLayer">

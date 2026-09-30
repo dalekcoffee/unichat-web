@@ -81,6 +81,8 @@ system=1     show connection messages</span>
           <label class="field"><span>Channel name</span><input type="text" data-path="twitch.channel" placeholder="yourchannel" autocomplete="off" spellcheck="false"></label>
         </div>
         <p class="help">Shows chat, bits, Hype Chats, subs, gift subs, raids and announcements. Follows and channel points need a Twitch login, so they're not included.</p>
+        <label class="check"><input type="checkbox" data-path="twitch.catchUp"> Fill in chat I missed while disconnected</label>
+        <p class="help">Twitch doesn't resend chat you missed (for example while your phone had UniChat in the background). After reconnecting, UniChat fetches the channel's recent chat from <a href="https://recent-messages.robotty.de/" target="_blank" rel="noopener noreferrer">recent-messages.robotty.de</a>, a free service that Chatterino and other chat apps use, and adds what you missed, without sounds or popups. Turn this off to never contact it.</p>
       </div>
     </section>
 
@@ -102,6 +104,7 @@ system=1     show connection messages</span>
             </div>
           </div>
           <label class="field"><span>Only play the gift sound at or above (coins)</span><input type="number" data-path="tikTok.minGiftCoinsForSound" min="0" step="1"></label>
+          <label class="field"><span>Clear joins after <em>seconds · 0 = keep</em></span><input type="number" data-path="tikTok.joinsClearSec" min="0" max="3600" step="1"></label>
         </div>
         <div class="toggles">
           <label class="check"><input type="checkbox" data-path="tikTok.showJoins"> Show joins (quiet)</label>
@@ -114,7 +117,7 @@ system=1     show connection messages</span>
           <li>Paste it above and press <b>Save</b>. It stays in this browser.</li>
         </ol>
         <p class="help" id="tiktokCount"></p>
-        <p class="help"><b>Quiet</b> lines show in the chat without a sound, popup or alert. Joins show once per viewer every 10 minutes. Gift combos alert once, when the combo finishes.</p>
+        <p class="help"><b>Quiet</b> lines show in the chat without a sound, popup or alert. Joins show once per viewer every 10 minutes and fade out of the chat after the time above. Gift combos alert once, when the combo finishes.</p>
       </div>
     </section>
 
@@ -266,6 +269,22 @@ system=1     show connection messages</span>
       <div class="grid">
         <label class="field"><span>Minimum seconds between chat sounds</span><input type="number" data-path="alerts.chatSoundCooldownSec" min="0" max="60" step="0.5"></label>
       </div>
+      <h3>First chat after a quiet spell</h3>
+      <div class="grid">
+        <label class="field"><span>When chat has been quiet for <em>seconds</em></span><input type="number" data-path="alerts.quietChat.afterSec" min="5" max="3600" step="1"></label>
+      </div>
+      <div class="toggles">
+        <label class="check"><input type="checkbox" data-path="alerts.quietChat.vibrate"> Vibrate the phone for the next message</label>
+      </div>
+      <div class="sound-line">
+        <label class="check"><input type="checkbox" data-path="alerts.quietChat.sound"> Play this sound for it instead of the chat sound</label>
+        <div class="sr-controls">
+          <select data-path="alerts.quietChat.soundName" data-sound-select aria-label="First chat after a quiet spell sound"></select>
+          <span data-volume-control="alerts.quietChat.volume"></span>
+          <span data-test-buttons="alerts.quietChat.soundName|alerts.quietChat.volume"></span>
+        </div>
+      </div>
+      <p class="help">So a message after a lull is harder to miss. Only that first message is marked; the ones after it are normal until chat goes quiet again. Your own messages restart the count. <b>Vibration</b> works in Chrome on Android; Firefox and iPhones don't let websites vibrate, so use the sound there. It only works while the chat page is on screen.</p>
       <h3>Connection problems</h3>
       <div class="sound-line">
         <label class="check"><input type="checkbox" data-path="alerts.soundOnConnectionLost"> Play a sound when a platform can't reconnect</label>
@@ -284,6 +303,7 @@ system=1     show connection messages</span>
         </div>
       </div>
       <p class="help">Short drops reconnect quietly (a yellow banner shows the tries). If a platform still can't reconnect after 3 tries, the banner turns red and the first sound plays. UniChat tries 6 more times; if those fail too, it stops, the second sound plays and that platform's status pill turns red until you press <b>Reconnect</b> on the chat page.</p>
+      <p class="help"><b>Phones</b> pause web pages in the background (another app, screen off), which drops the connections. UniChat doesn't count those as problems: when you come back it reconnects straight away and quietly, Twitch and TikTok first, then the others, and fills in the chat you missed where the platform allows it: Twitch (see above), TikTok and Kick.</p>
       <h3>Send a test alert</h3>
       <p class="help" style="margin-top:0">Goes to the chat pages open in this browser.</p>
       <div class="row test-row">
@@ -324,6 +344,7 @@ system=1     show connection messages</span>
           </select>
         </label>
         <label class="field"><span>Clear thanked &amp; answered after <em>seconds · 0 = keep</em></span><input type="number" data-path="display.removeDoneAfterSec" min="0" max="3600" step="1"></label>
+        <label class="field"><span>Highlight messages missed while away for <em>seconds · 0 = until you leave again</em></span><input type="number" data-path="display.missedHighlightSec" min="0" max="3600" step="1"></label>
         <label class="field"><span>Messages kept on screen</span><input type="number" data-path="display.maxMessages" min="50" max="2000" step="50"></label>
         <label class="field"><span>Overlay fade-out <em>seconds · 0 = never</em></span><input type="number" data-path="display.overlayFadeSec" min="0" max="3600" step="1"></label>
       </div>
@@ -339,8 +360,15 @@ system=1     show connection messages</span>
         <label class="check"><input type="checkbox" data-path="display.thirdPartyEmotes"> 7TV, BetterTTV and FrankerFaceZ emotes, in chat from every platform</label>
         <label class="check"><input type="checkbox" data-path="display.showGifs"> Twitch GIFs (from GIPHY)</label>
       </div>
+      <h3>Stream preview</h3>
+      <div class="grid">
+        <label class="field"><span>Beam channel <em>beamstream.gg/…</em></span><input type="text" data-path="preview.beam" placeholder="yourchannel" autocomplete="off" spellcheck="false"></label>
+      </div>
+      <label class="check"><input type="checkbox" data-path="preview.enabled"> Show the <b>Preview</b> button on the chat page</label>
+      <p class="help"><b>Preview</b> opens your stream in a popup on the chat page, using Beam's player (<code>beamstream.gg</code>). The player only loads while the popup is open and the page is on screen, so it uses no data otherwise. TikTok, Kick and the others can't be shown this way (TikTok doesn't allow its LIVE player inside other sites). On the narrowest phones the About button steps aside to make room.</p>
       <p class="help"><b>Automatic</b> puts the Alerts panel to the right of the chat, and above it on narrow or portrait screens (phones, vertical monitors). It starts at 20% of the space. On the chat page, drag the line between the chat and the panel to resize it; double-click it to reset.</p>
       <p class="help">Ticking <b>✓</b> on an alert or question fades it out of the panel after the time above (it stays in the chat). Click the tick again before then to undo.</p>
+      <p class="help"><b>While you were away</b>: the chat page keeps its last messages for 2 hours, so a reload or reopening the app brings them back. Coming back after switching apps, reloading or reopening, what was sent meanwhile is filled in where the platform allows it (Twitch, TikTok and Kick; Velora, Blaze and Nimo TV can't), in time order under a <b>While you were away</b> line and highlighted for the time above, without sounds or popups.</p>
       <p class="help"><b>7TV, BetterTTV and FrankerFaceZ</b>: their global emotes plus the ones set up for your Twitch channel (above), turned into pictures when anyone on any platform types them. The emote lists come from <code>7tv.io</code> and <code>api.betterttv.net</code> (FrankerFaceZ through BetterTTV), with no login.</p>
       <p class="help"><b>Twitch GIFs</b>: Tier 2 and 3 subscribers can post GIFs from GIPHY in Twitch chat. They load from GIPHY's servers (<code>media.giphy.com</code>). Turn them off to show each GIF's caption instead, with nothing loaded from GIPHY.</p>
       <p class="help">TikTok, Velora, Blaze and Nimo TV send profile pictures with chat. Twitch and Kick don't, so UniChat looks them up by username (Twitch with <a href="https://api.ivr.fi/v2/docs" target="_blank" rel="noopener noreferrer">IVR</a>, a free public Twitch API; Kick on kick.com) and remembers them in this browser for a week. Turn profile pictures off to stop these lookups.</p>

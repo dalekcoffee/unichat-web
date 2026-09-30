@@ -417,8 +417,15 @@
         [[493.9, 0], [415.3, 0.19], [349.2, 0.38]].forEach(([f, s]) => tone(c, o, { freq: f, start: s, dur: 0.16, type: 'square', gain: 0.13 }));
         tone(c, o, { freq: 261.6, start: 0.58, dur: 0.8, type: 'square', gain: 0.13, slideTo: 233.1 });
       },
+      // A soft rising C-major arpeggio with a faint shimmer an octave up, about a second long (plays when sound is turned on).
+      sparkle: (c, o) => {
+        [523.3, 659.3, 784, 1046.5].forEach((f, i) => {
+          tone(c, o, { freq: f, start: i * 0.1, dur: 0.7, gain: 0.26, attack: 0.012 });
+          tone(c, o, { freq: f * 2, start: i * 0.1 + 0.01, dur: 0.4, type: 'triangle', gain: 0.035, attack: 0.012 });
+        });
+      },
     };
-    const BUILTIN_NAMES = { pop: 'Pop', blip: 'Blip', chime: 'Chime', ding: 'Ding', bell: 'Bell', coins: 'Coins', fanfare: 'Fanfare', levelup: 'Level up', whoosh: 'Whoosh', error: 'Alert buzz', failed: 'Failed' };
+    const BUILTIN_NAMES = { pop: 'Pop', blip: 'Blip', chime: 'Chime', ding: 'Ding', bell: 'Bell', coins: 'Coins', fanfare: 'Fanfare', levelup: 'Level up', whoosh: 'Whoosh', error: 'Alert buzz', failed: 'Failed', sparkle: 'Sparkle' };
 
     async function play(name, volume) {
       const c = context();
@@ -534,6 +541,6 @@
     return { available: !!synth, voices, say, forEvent, stop, speaking };
   })();
 
-  const VERSION = '0.0.13';
+  const VERSION = '0.0.14';
   window.UniChat = { VERSION, api, storePin, fmtMoney, icon, esc, safeUrl, safeColor, renderEvent, connect, Sound, Speech, classify, plainText, NAMES, PLATFORMS, ALERT_KINDS, KIND_LABEL, KIND_EMOJI, fmtTime, nameHtml, avatarHtml, swapAvatar, partsHtml, shownParts, userColor, statusTone, attemptText, fmtCount, fmtDuration };
 })();

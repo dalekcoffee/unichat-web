@@ -147,7 +147,7 @@
    * resolves quietly when `signal` aborts. hooks.open({ call, join }) runs once connected (a thrown error ends the
    * connection); hooks.push(uri, bytes) runs for every room message.
    */
-  function runSocket(url, signal, hooks) {
+  function runSocket(url, signal, hooks, ctx) {
     return new Promise((resolve, reject) => {
       const ws = new WebSocket(url);
       ws.binaryType = 'arraybuffer';
@@ -171,6 +171,8 @@
       }
       const fail = err => finish(err instanceof ConnectorError ? err : new ConnectorError((err && err.message) || String(err)));
       signal.addEventListener('abort', () => finish(), { once: true });
+      // Back from the background: Nimo answers a heartbeat at once if the connection survived.
+      if (H && ctx) H.watchResume(ctx, { lastData: () => lastData, waitMs: 10000, fail, ping: () => send(command(CMD.heartbeat)) });
 
       function send(bytes) { if (ws.readyState === WebSocket.OPEN) ws.send(bytes); }
 
@@ -521,7 +523,7 @@
             }, 120000);
           },
           push(uri, bytes) { if (handle) handle(uri, bytes); },
-        });
+        }, ctx);
       } catch (err) {
         if (!err.config) host++;
         throw err;

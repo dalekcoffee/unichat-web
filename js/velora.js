@@ -165,7 +165,7 @@
         event(name, data) {
           try { handle(name, data); } catch (err) { if (err instanceof ConnectorError && fail) fail(err); else throw err; }
         },
-      });
+      }, ctx);
     },
   });
 

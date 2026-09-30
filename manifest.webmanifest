@@ -1,0 +1,18 @@
+{
+  "id": "./",
+  "name": "UniChat",
+  "short_name": "UniChat",
+  "description": "Twitch, TikTok, Kick, Velora, Blaze and Nimo TV chat in one read-only window.",
+  "start_url": "./index.html",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "any",
+  "background_color": "#0f0f14",
+  "theme_color": "#17171f",
+  "categories": ["entertainment", "social", "utilities"],
+  "icons": [
+    { "src": "icons/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+    { "src": "icons/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
+    { "src": "icons/icon-maskable-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+  ]
+}

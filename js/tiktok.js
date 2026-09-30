@@ -4,7 +4,7 @@
    unrecognised is listed in Settings → Diagnostics. */
 (function () {
   'use strict';
-  const { hub, ConnectorError, registerConnector } = window.UniChatHub;
+  const { hub, ConnectorError, registerConnector, watchResume } = window.UniChatHub;
 
   const first = v => (Array.isArray(v) ? v[0] : v);
   const pick = (...vals) => vals.find(v => v !== undefined && v !== null && v !== '');
@@ -43,6 +43,16 @@
     };
   }
 
+  /**
+   * When TikTok says the message was sent (ms). After a reconnect TikTok resends its recent chat: messages already shown
+   * are skipped (hub.js), and missed ones keep their real time. Anything implausible means "now".
+   */
+  function sentAt(d) {
+    const t = num(pick(d.common && d.common.createTime, d.createTime, d.common && d.common.clientSendTime));
+    const ms = t && t < 1e11 ? t * 1000 : t; // seconds or milliseconds
+    return ms && ms > Date.now() - 6 * 3600000 && ms < Date.now() + 60000 ? ms : undefined;
+  }
+
   function commentParts(d) {
     const comment = String(pick(d.comment, d.content, '') || '');
     const emotes = Array.isArray(d.emotes) ? d.emotes : [];
@@ -72,12 +82,16 @@
       const kind = kindOf(m);
       const d = m.data || m.payload || m;
       const s = settings;
+      // Every line carries TikTok's own message ID and send time when it has them, so the ones TikTok resends after a
+      // reconnect (gifts included) are recognised and skipped, instead of alerting twice.
+      const raw = pick(d.msgId, d.common && d.common.msgId);
+      const msgId = typeof raw === 'string' || typeof raw === 'number' ? 'tiktok:' + String(raw).slice(0, 80) : undefined;
+      const post = e => hub.publish(Object.assign({ id: msgId, ts: sentAt(d), platform: 'tiktok' }, e));
 
       switch (kind) {
         case 'chat':
           markLive();
-          hub.publish({ id: 'tiktok:' + (pick(d.msgId, d.common && d.common.msgId) || Math.random().toString(36).slice(2)),
-            platform: 'tiktok', kind: 'chat', user: userOf(d, s), parts: commentParts(d) });
+          post({ kind: 'chat', user: userOf(d, s), parts: commentParts(d) });
           break;
 
         case 'gift': {
@@ -92,8 +106,8 @@
           const coins = diamonds * count;
           const name = String(pick(details.giftName, details.name, d.giftName, 'a gift'));
           const picture = pick(imageUrl(details.giftImage), imageUrl(details.image), imageUrl(details.icon), d.giftPictureUrl);
-          hub.publish({
-            platform: 'tiktok', kind: 'donation', user: userOf(d, s),
+          post({
+            kind: 'donation', user: userOf(d, s),
             title: count > 1 ? `sent ${name} x${count}` : `sent ${name}`,
             amount: coins > 0 ? `${coins.toLocaleString()} coin${coins === 1 ? '' : 's'}` : undefined,
             value: coins || undefined, unit: 'coins',
@@ -112,21 +126,21 @@
           const user = userOf(d, s);
           if (isFollow) {
             if (hub.isDuplicate(`tiktok-follow:${user.login}`, 600000)) break;
-            hub.publish({ platform: 'tiktok', kind: 'follow', user, title: 'followed' });
+            post({ kind: 'follow', user, title: 'followed' });
           } else if (isShare && s.tikTok.showShares) {
-            hub.publish({ platform: 'tiktok', kind: 'chat', user, title: 'shared the LIVE', silent: true });
+            post({ kind: 'chat', user, title: 'shared the LIVE', silent: true });
           }
           break;
         }
 
         case 'subnotify': case 'subscribe':
           markLive();
-          hub.publish({ platform: 'tiktok', kind: 'sub', user: userOf(d, s), title: 'subscribed' });
+          post({ kind: 'sub', user: userOf(d, s), title: 'subscribed' });
           break;
 
         case 'like':
           markLive();
-          if (s.tikTok.showLikes) hub.publish({ platform: 'tiktok', kind: 'chat', user: userOf(d, s), title: `liked the LIVE x${num(d.likeCount) || 1}`, silent: true });
+          if (s.tikTok.showLikes) post({ kind: 'chat', user: userOf(d, s), title: `liked the LIVE x${num(d.likeCount) || 1}`, silent: true });
           break;
 
         case 'member': { // someone joined: a quiet line when Settings → TikTok → "Show joins" is on, never an alert
@@ -134,7 +148,10 @@
           if (!s.tikTok.showJoins) break;
           const user = userOf(d, s);
           if (!user.login || hub.isDuplicate(`tiktok-join:${user.login}`, 600000)) break; // once per viewer per 10 minutes
-          hub.publish({ platform: 'tiktok', kind: 'chat', user, title: 'joined', silent: true });
+          // It leaves the chat by itself after Settings → TikTok → "Clear joins after" (0 keeps it).
+          const clearSec = Math.max(0, Number(s.tikTok.joinsClearSec) || 0);
+          post({ kind: 'chat', code: 'join', user, title: 'joined', silent: true,
+            expiresAt: clearSec ? Date.now() + clearSec * 1000 : undefined });
           break;
         }
 
@@ -149,13 +166,13 @@
         }
 
         case 'questionnew':
-          hub.publish({ platform: 'tiktok', kind: 'chat', user: userOf(d, s), title: 'Question',
+          post({ kind: 'chat', user: userOf(d, s), title: 'Question',
             parts: [{ t: 'text', v: String(pick(d.details && d.details.text, d.questionText, '') || '') }] });
           break;
 
         case 'emotechat': {
           const url = pick(d.emoteImageUrl, imageUrl(d.emote && d.emote.image), imageUrl(first(d.emoteList) && first(d.emoteList).image));
-          if (url) hub.publish({ platform: 'tiktok', kind: 'chat', user: userOf(d, s), parts: [{ t: 'emote', v: 'sticker', url }] });
+          if (url) post({ kind: 'chat', user: userOf(d, s), parts: [{ t: 'emote', v: 'sticker', url }] });
           break;
         }
 
@@ -239,6 +256,9 @@
           if (err) reject(err); else resolve();
         }
         signal.addEventListener('abort', () => finish(), { once: true });
+        // Back from the background: a live TikTok (or your relay) sends something every few seconds, so 20 seconds of
+        // silence means the connection didn't survive. Not live yet (nothing received): nothing to check.
+        watchResume(ctx, { lastData: () => (gotData || viaRelay ? lastData : Infinity), waitMs: 20000, fail: finish });
 
         ws.onmessage = ev => {
           lastData = Date.now();

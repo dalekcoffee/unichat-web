@@ -193,7 +193,7 @@
           ctx.connected(`blaze.stream/${slug}`);
         },
         event: handle,
-      });
+      }, ctx);
     },
   });
 

@@ -271,6 +271,26 @@ body.no-avatars .msg .avatar { display: none; }
   box-shadow: 0 6px 20px rgba(0,0,0,.35); white-space: nowrap;
 }
 
+/* ---------- While you were away: missed messages, between two lines (dashboard.js) ---------- */
+.msg.missed:not(.hl):not(.alert) { background: color-mix(in srgb, var(--wait) 15%, transparent); }
+.msg.alert.missed { box-shadow: 0 0 0 2px color-mix(in srgb, var(--wait) 60%, transparent); }
+.msg.missed.missed-fading:not(.hl):not(.alert) { background: transparent; transition: background-color 1.5s ease; }
+.msg.alert.missed.missed-fading { box-shadow: 0 0 0 2px transparent; transition: box-shadow 1.5s ease; }
+.away-divider { margin: 12px 2px 6px; font-size: .78em; color: var(--wait); }
+.away-divider .ad-line, .away-marker { display: flex; align-items: center; gap: 8px; text-align: center; }
+.away-divider .ad-line::before, .away-divider .ad-line::after { content: ""; flex: 1; height: 1px; background: color-mix(in srgb, var(--wait) 60%, transparent); }
+.away-divider .ad-line span { font-weight: 600; }
+.ad-chips { display: flex; flex-wrap: wrap; justify-content: center; gap: 4px; margin-top: 5px; }
+.ad-chips span {
+  display: inline-flex; align-items: center; gap: 4px; padding: 1px 8px; border-radius: 999px; font-size: .95em;
+  background: color-mix(in srgb, var(--wait) 16%, transparent); color: var(--text);
+}
+.ad-chips svg { width: 1.1em; height: 1.1em; }
+.ad-chips .ad-none { background: none; border: 1px solid var(--line); color: var(--text-dim); }
+.away-marker { margin: 6px 2px 8px; color: var(--text-faint); font-size: .74em; }
+.away-marker::before, .away-marker::after { content: ""; flex: 1; height: 1px; background: var(--line); }
+body.overlay .away-divider, body.overlay .away-marker { display: none; }
+
 /* ---------- Highlights ---------- */
 .msg.hl { border-left-width: 3px; }
 .msg.hl-mention { background: color-mix(in srgb, #f5b700 14%, transparent); border-left-color: #f5b700 !important; }
@@ -491,6 +511,14 @@ body.no-avatars .ap-item .avatar { display: none; }
   padding: 4px 7px; border-radius: 6px; font-size: 13px; font-weight: 600; display: inline-flex; align-items: center; gap: 5px;
 }
 .alerts-panel header .btn { flex: none; }
+/* Clear: after one tap it offers to clear every tab for 5 seconds; the line along its bottom shows the time left. */
+.clear-btn { position: relative; overflow: hidden; }
+.clear-btn.armed { border-color: var(--warn); color: var(--text); background: color-mix(in srgb, var(--warn) 18%, var(--bg-elev-2)); }
+.clear-btn.armed::after {
+  content: ""; position: absolute; left: 0; right: 0; bottom: 0; height: 2px; background: var(--warn);
+  transform-origin: left center; animation: ap-expire 5s linear forwards;
+}
+.recap.clearing > :not(.rc-head):not(.rc-actions) { opacity: 0; transition: opacity .4s ease; }
 .panel-tabs button.active { background: var(--bg-elev-2); border-color: var(--line); color: var(--text); }
 .panel-tabs .count-badge { background: var(--bg-elev-2); color: var(--text-dim); }
 .panel-tabs .tab-ico { font-size: 12px; line-height: 1; }
@@ -579,6 +607,17 @@ body.no-avatars .ap-item .avatar { display: none; }
 .about-credits a:hover { text-decoration: underline; }
 .about-credits img { width: 22px; height: 22px; object-fit: contain; flex: none; }
 .credit-claude svg { width: 16px; height: 16px; fill: #d97757; flex: none; }
+
+/* ---------- Stream preview (Beam's player in a popup; loaded only while open) ---------- */
+.preview-card { width: min(960px, 100%); max-height: none; padding: 12px 14px 14px; }
+.preview-head { display: flex; align-items: center; gap: 8px; margin-bottom: 10px; }
+.preview-head > svg { width: 20px; height: 20px; flex: none; color: var(--err); }
+.preview-head h2 { margin: 0; font-size: 16px; }
+.preview-src { color: var(--text-dim); font-size: 13px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; }
+.preview-head .x { border: 0; background: none; cursor: pointer; font-size: 26px; line-height: 1; color: var(--text-dim); padding: 0 4px; }
+.preview-head .x:hover { color: var(--text); }
+.preview-frame { position: relative; aspect-ratio: 16 / 9; max-height: calc(100dvh - 110px); margin: 0 auto; border-radius: 10px; overflow: hidden; background: #000; }
+.preview-frame iframe { position: absolute; inset: 0; width: 100%; height: 100%; border: 0; display: block; }
 
 /* ---------- "Turn on sound?" prompt ---------- */
 .sound-layer { z-index: 65; cursor: pointer; }
@@ -931,6 +970,58 @@ body.settings .sr-controls select, body.settings .test-row select { width: auto;
   .pill { padding: 3px; }
   .pill svg { width: 16px; height: 16px; }
 }
+
+/* ---------- Touch screens (phones, tablets): the chat page is about 10% bigger, so it's easier to read and tap ---------- */
+@media (pointer: coarse) {
+  body.dashboard { font-size: calc(var(--fs) * 1.1); }
+  .topbar { padding-top: max(9px, env(safe-area-inset-top)); padding-bottom: 9px; font-size: 15.4px; }
+  .iconbtn { height: 35px; min-width: 35px; font-size: 14.3px; }
+  .iconbtn svg { width: 17.6px; height: 17.6px; }
+  .pill { font-size: 14.3px; padding: 4px 9px; }
+  .pill svg { width: 15.4px; height: 15.4px; }
+  .dot { width: 9px; height: 9px; }
+  .count-badge { min-width: 20px; font-size: 12px; line-height: 20px; }
+  .banner { padding: 8px 15px; font-size: 15.4px; }
+  .banner svg { width: 17.6px; height: 17.6px; }
+  .alerts-panel header { padding: 8px 9px 8px 11px; font-size: 14.3px; }
+  .panel-tabs button { padding: 5px 8px; font-size: 14.3px; }
+  .panel-tabs .tab-ico { font-size: 13.2px; }
+  .btn.small { height: 33px; font-size: 14.3px; }
+  .alerts-list .none { font-size: 14.3px; }
+  .ap-item { padding: 9px 9px 9px 11px; font-size: 15.4px; }
+  .ap-item .meta { font-size: 12.7px; }
+  .ap-item .meta svg { width: 14.3px; height: 14.3px; }
+  .ap-item .msgtext { font-size: 14.3px; }
+  .ap-item .ap-check, .ap-item .ap-unpin { width: 37px; height: 37px; }
+  .ap-item .ap-check svg, .ap-item .ap-unpin svg { width: 20px; height: 20px; }
+  .recap { font-size: 14.9px; }
+  .rc-chips .stat { font-size: 13.75px; }
+  .recap h4 { font-size: 12.7px; }
+  .jump { padding: 8px 18px; font-size: 15.4px; }
+  .msg-actions button { min-width: 37px; height: 33px; font-size: 15.4px; }
+  .msg-actions .x-btn svg { width: 16.5px; height: 16.5px; }
+}
+/* Phones: the buttons stay narrow so all six status icons still fit beside them. */
+@media (pointer: coarse) and (max-width: 560px) {
+  .iconbtn { min-width: 33px; padding: 0 6px; }
+}
+@media (pointer: coarse) and (max-width: 480px) {
+  .pill { padding: 4px; }
+  .pill svg { width: 19.8px; height: 19.8px; }
+  .pill .dot { width: 12px; height: 12px; }
+}
+/* Narrowest phones: About steps aside so all six status icons and the other buttons (Preview included) still fit. */
+@media (max-width: 400px) {
+  #aboutBtn { display: none; }
+}
+@media (pointer: coarse) and (max-width: 420px) {
+  .topbar { gap: 3px; }
+  .iconbtn { min-width: 31px; padding: 0 4px; gap: 4px; }
+  .pills { gap: 1px; }
+  .pill { padding: 2px; }
+  .pill svg { width: 17.6px; height: 17.6px; }
+}
+
 @media (prefers-reduced-motion: reduce) {
-  .msg, .popup, .savebar, .dot, .pill .pname, .sound-ico { animation: none !important; transition: none !important; }
+  .msg, .popup, .savebar, .dot, .pill .pname, .sound-ico, .clear-btn.armed::after { animation: none !important; transition: none !important; }
 }
