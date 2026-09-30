@@ -433,6 +433,8 @@
       if (!e.ts) e.ts = now();
       e.pts = sentTime; // ts is on the platform's clock (not this device's), see newestSeen
       tidyEvent(e);
+      // A name with a slur in it (Settings → Filters → Also hide slurs) is shown and read as "Someone" everywhere.
+      if (e.user && !(state.settings && state.settings.filters && state.settings.filters.hideSlurs === false) && [e.user.name, e.user.login].some(n => window.UniChat.nameHasSlur(n))) e.user.name = 'Someone';
       if (sentTime && catchingUp() && e.kind !== 'system') {
         // Older than the newest message already here from this platform (compared on the platform's own clock, so a
         // phone clock that's off doesn't matter): a resend of something from before, already shown or long gone. Skipped.

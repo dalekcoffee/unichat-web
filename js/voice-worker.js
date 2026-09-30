@@ -31,7 +31,18 @@ self.onmessage = ev => {
       const text = String(m.text || '').slice(0, 500);
       const speed = Math.max(0.5, Math.min(2, Number(m.speed) || 1));
       // Sentence by sentence, so the first one can play while the rest is still being made.
-      const parts = text.split(/(?<=[.!?])\s+/).map(s => s.trim()).filter(Boolean);
+      // A long stretch without full stops is cut after a comma, or else between words, at about 120 characters.
+      const parts = text.split(/(?<=[.!?…])\s+/).flatMap(s => {
+        const out = [];
+        s = s.trim();
+        while (s.length > 150) {
+          const cut = s.lastIndexOf(', ', 130) > 40 ? s.lastIndexOf(', ', 130) + 1 : (s.lastIndexOf(' ', 120) > 40 ? s.lastIndexOf(' ', 120) : 120);
+          out.push(s.slice(0, cut).trim());
+          s = s.slice(cut).trim();
+        }
+        out.push(s);
+        return out;
+      }).filter(Boolean);
       for (let i = 0; i < parts.length; i++) {
         const audio = await tts.generate(parts[i], { voice, speed });
         const wav = audio.toWav();

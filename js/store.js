@@ -52,6 +52,7 @@
         'commanderroot', 'tangiabot', 'frostytoolsdotcom', 'restreambot', 'botrix', 'kicklet'],
       blockedUsers: [],
       blockedWords: [],
+      hideSlurs: true, // the built-in list of the worst slurs (js/common.js SLURS), on top of blockedWords
     },
     highlights: { enabled: true, mentions: true, keywords: [], firstTimeChatters: true, sound: true, soundName: 'builtin:ding', volume: 0.5 },
     popup: { enabled: true, seconds: 6, kinds: { follow: false, donation: true, sub: true, raid: true } },

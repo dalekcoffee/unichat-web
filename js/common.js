@@ -74,6 +74,56 @@
 
   function escapeRegex(s) { return s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'); }
 
+  // Built-in list of the worst slurs (Settings → Filters → "Also hide slurs", on by default). Each is caught in its
+  // usual disguises: look-alike letters, digits and symbols (1→i, 0→o, @→a, 6→g…), accents, fancy or small-caps
+  // letters, look-alike letters from other alphabets, hidden characters, stretched letters, and dots, dashes or spaces
+  // between the letters. In a pattern, "<" = must start a word, ">" = must end a word (plurals allowed), and a space
+  // = two words that may be written together or apart.
+  const SLURS = [
+    '<nigg(er|a|uh|ur)', '<nig>', '<niglet', 'sand nigg(er|a)',
+    '<fag(ot|it|et|y)?>', '<trann(y|ie)>',
+    '<kike>', '<spic>', '<chink>', '<gook>', '<coon>', '<wetback>', '<beaner>', '<jigaboo>', '<porch monkey>',
+    '<rag head>', '<towel head>', '<paki>', '<retard(ed)?>',
+  ];
+  const LOOKALIKE = {
+    a: 'a4@^', b: 'b8', c: 'ck(¢', e: 'e3€', g: 'g69q', h: 'h#', i: 'i1!|ly', k: 'kc', l: 'l1|i', o: 'o0', s: 's5$z', t: 't7+', u: 'uv', y: 'yi',
+  };
+  const slurRegex = (() => {
+    const cls = ch => '[' + escapeRegex(LOOKALIKE[ch] || ch).replace(/-/g, '\\-') + ']';
+    const PUNCT = `[._*'"\`~,:;=/\\\\|+\\-]`;
+    // joined: letters touching (niiigger, n.i.gger); spaced: a gap after every letter (n i g g e r, n-i-g-g-e-r).
+    const build = (pat, spaced) => {
+      let out = '', letters = 0;
+      for (const ch of pat) {
+        if (ch === '<') out += '(?<!\\p{L})';
+        else if (ch === '>') out += `(?:${spaced ? `(?:\\s|${PUNCT}){1,3}` : `${PUNCT}?`}${cls('s')}${spaced ? '' : '+'})?(?!\\p{L})`;
+        else if (ch === ' ') out += `(?:\\s|${PUNCT}){0,3}`; // a gap allowed (or none) between two words
+        else if (/[a-z]/.test(ch)) {
+          if (letters++) out += spaced ? `(?:\\s|${PUNCT}){1,3}` : `${PUNCT}{0,2}`;
+          out += cls(ch) + (spaced ? '' : '+');
+        } else out += ch;
+      }
+      return out;
+    };
+    return new RegExp(SLURS.flatMap(p => [build(p, false), build(p, true)]).map(x => `(?:${x})`).join('|'), 'u');
+  })();
+  // Look-alike letters Unicode doesn't fold on its own: small caps, and Cyrillic / Greek letters that look Latin.
+  const FOLD = { 'ᴀ': 'a', 'ʙ': 'b', 'ᴄ': 'c', 'ᴅ': 'd', 'ᴇ': 'e', 'ғ': 'f', 'ɢ': 'g', 'ʜ': 'h', 'ɪ': 'i', 'ᴊ': 'j', 'ᴋ': 'k', 'ʟ': 'l', 'ᴍ': 'm',
+    'ɴ': 'n', 'ᴏ': 'o', 'ᴘ': 'p', 'ǫ': 'q', 'ʀ': 'r', 'ᴛ': 't', 'ᴜ': 'u', 'ᴠ': 'v', 'ᴡ': 'w', 'ʏ': 'y', 'ᴢ': 'z', 'ı': 'i', 'ɡ': 'g',
+    'а': 'a', 'в': 'b', 'е': 'e', 'ё': 'e', 'к': 'k', 'м': 'm', 'н': 'h', 'о': 'o', 'р': 'p', 'с': 'c', 'т': 't', 'у': 'y', 'х': 'x', 'і': 'i', 'ї': 'i', 'ј': 'j', 'ѕ': 's', 'ԁ': 'd', 'ԛ': 'q',
+    'α': 'a', 'β': 'b', 'ε': 'e', 'η': 'n', 'ι': 'i', 'κ': 'k', 'ν': 'v', 'ο': 'o', 'ρ': 'p', 'τ': 't', 'υ': 'u', 'χ': 'x', 'γ': 'y' };
+  function hasSlur(t) {
+    if (!t) return false;
+    const plain = String(t).normalize('NFKD').toLowerCase()
+      .replace(/[\p{M}\p{Cf}]/gu, '')                           // accents and hidden characters (zero-width etc.)
+      .replace(/[^\x00-\x7f]/g, ch => FOLD[ch] || ch);
+    return slurRegex.test(plain);
+  }
+  // Names run words together (BigN1gga, x_slur_x), so they're also checked split into words at capitals and underscores.
+  function nameHasSlur(n) {
+    return !!n && hasSlur(String(n).replace(/(\p{Ll})(?=\p{Lu})/gu, '$1 ').replace(/_+/g, ' '));
+  }
+
   // Compiled once per settings object.
   const compiled = new WeakMap();
   function rulesFor(s) {
@@ -100,6 +150,7 @@
       bots: f.hideBots ? lower(f.botNames) : new Set(),
       blockedUsers: lower(f.blockedUsers),
       blockedWords: wordsRegex(f.blockedWords),
+      slurs: f.hideSlurs !== false,
       hideCommands: !!f.hideCommands,
       highlight: !!h.enabled,
       firstTimers: !!h.firstTimeChatters,
@@ -110,25 +161,28 @@
   }
 
   /**
-   * { hidden, highlight: 'first' | 'mention' | null, maskText, maskReply } for an event under the current settings.
-   * Alerts are never hidden (they're real support), but a hidden user's message, or one with a blocked word, is left
-   * out (maskText) so it isn't shown, popped up or read aloud. A quoted reply to such a message is left out too (maskReply).
+   * { hidden, highlight: 'first' | 'mention' | null, maskText, maskReply, maskName } for an event under the current settings.
+   * Alerts are never hidden (they're real support), but a hidden user's message, or one with a blocked word or slur, is
+   * left out (maskText) so it isn't shown, popped up or read aloud. A quoted reply to such a message is left out too
+   * (maskReply). Chat from a name with a slur in it is hidden; on an alert that name isn't read aloud (maskName).
    */
   function classify(e, s) {
-    const out = { hidden: false, highlight: null, maskText: false, maskReply: false };
+    const out = { hidden: false, highlight: null, maskText: false, maskReply: false, maskName: false };
     if (!s || e.kind === 'system') return out;
     const r = rulesFor(s);
     const u = e.user || {};
     const norm = x => String(x).toLowerCase().replace(/^@/, '');
     const ids = [u.login, u.name].filter(Boolean).map(norm);
     const text = typedText(e);
-    const blockedText = t => !!(r.blockedWords && r.blockedWords.test(t));
-    if (e.reply && ((e.reply.name && r.blockedUsers.has(norm(e.reply.name))) || blockedText(String(e.reply.text || '')))) out.maskReply = true;
+    const blockedText = t => !!(r.blockedWords && r.blockedWords.test(t)) || (r.slurs && hasSlur(t));
+    const slurName = r.slurs && [u.login, u.name].some(nameHasSlur);
+    if (e.reply && ((e.reply.name && (r.blockedUsers.has(norm(e.reply.name)) || (r.slurs && nameHasSlur(e.reply.name)))) || blockedText(String(e.reply.text || '')))) out.maskReply = true;
     if (e.kind !== 'chat') {
       out.maskText = ids.some(id => r.blockedUsers.has(id)) || blockedText(text);
+      out.maskName = slurName; // alerts are still shown (real support), but a slur in the name is never read aloud
       return out;
     }
-    if (ids.some(id => r.bots.has(id) || r.blockedUsers.has(id)) || (r.hideBots && u.isBot === true)) out.hidden = true; // isBot: platforms that label bots
+    if (ids.some(id => r.bots.has(id) || r.blockedUsers.has(id)) || (r.hideBots && u.isBot === true) || slurName) out.hidden = true; // isBot: platforms that label bots
     else if (r.hideCommands && /^\s*!\S/.test(text)) out.hidden = true;
     else if (blockedText(text)) out.hidden = true;
     if (out.hidden || !r.highlight || (u.roles || []).includes('broadcaster')) return out;
@@ -518,15 +572,15 @@
         .replace(/\b[A-Za-z]+\d+\b/g, '')   // Twitch cheermotes like Cheer100
         .replace(/\s+/g, ' ')
         .trim();
+      msg = msg.replace(/[\p{Extended_Pictographic}\u{1F1E6}-\u{1F1FF}️‍]/gu, '').replace(/\s+/g, ' ').trim(); // emoji
+      if (!/[\p{L}\p{N}]/u.test(msg)) msg = '';
       const max = tts.maxChars || 200;
       if (msg.length > max) msg = msg.slice(0, max).replace(/\s+\S*$/, '') + '…';
-      let intro = '';
-      if (tts.readNames) {
-        const name = (e.user && e.user.name ? e.user.name : 'Someone').replace(/^@/, '');
-        const amountInTitle = e.amount && e.title && e.title.toLowerCase().includes(e.amount.toLowerCase());
-        intro = `${name} ${e.title || ''}${e.amount && !amountInTitle ? ' ' + e.amount : ''}.`;
-      }
-      return `${intro} ${msg}`.trim();
+      const name = (cls && cls.maskName) || !(e.user && e.user.name) ? 'Someone' : e.user.name.replace(/^@/, '');
+      // With a message: "Name says: …" (what they typed). Without one (or when filters leave it out): who and what.
+      if (msg) return tts.readNames ? `${name} says: ${msg}` : msg;
+      const amountInTitle = e.amount && e.title && e.title.toLowerCase().includes(e.amount.toLowerCase());
+      return `${name} ${e.title || ''}${e.amount && !amountInTitle ? ' ' + e.amount : ''}.`.replace(/\s+/g, ' ').trim();
     }
 
     // UniChat's own voices: Kokoro (open-source, Apache-2.0) runs in a background worker on this device (js/voice-worker.js),
@@ -616,8 +670,7 @@
       if (!tts || !tts.enabled || e.silent || !(tts.kinds && tts.kinds[e.kind])) return '';
       cls = cls || classify(e, settings);
       if (cls.hidden) return '';
-      // UniChat's voices take a while on phones, so they read only the short part (who and what), not the message.
-      return kokoroId(tts.voice) ? textFor(e, Object.assign({}, tts, { readNames: true }), { maskText: true }) : textFor(e, tts, cls);
+      return textFor(e, tts, cls);
     }
 
     /**
@@ -647,6 +700,6 @@
     return { available: !!synth || typeof Worker === 'function', voices, say, forEvent, prepare, warmUp, stop, speaking, KOKORO };
   })();
 
-  const VERSION = '0.0.18';
-  window.UniChat = { VERSION, api, storePin, fmtMoney, icon, esc, safeUrl, safeColor, renderEvent, connect, Sound, Speech, classify, plainText, NAMES, PLATFORMS, ALERT_KINDS, KIND_LABEL, KIND_EMOJI, fmtTime, nameHtml, avatarHtml, swapAvatar, partsHtml, shownParts, userColor, statusTone, attemptText, fmtCount, fmtDuration };
+  const VERSION = '0.0.19';
+  window.UniChat = { VERSION, api, storePin, fmtMoney, icon, esc, safeUrl, safeColor, renderEvent, connect, Sound, Speech, classify, nameHasSlur, plainText, NAMES, PLATFORMS, ALERT_KINDS, KIND_LABEL, KIND_EMOJI, fmtTime, nameHtml, avatarHtml, swapAvatar, partsHtml, shownParts, userColor, statusTone, attemptText, fmtCount, fmtDuration };
 })();

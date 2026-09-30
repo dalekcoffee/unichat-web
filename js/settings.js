@@ -64,6 +64,7 @@
     display: 'M21 3H3a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h5v2h8v-2h5a2 2 0 0 0 2-2V5a2 2 0 0 0-2-2Zm0 14H3V5h18v12Z',
     backup: 'M19 9h-4V3H9v6H5l7 7 7-7ZM5 18v2h14v-2H5Z',
     flask: 'M19.8 18.4 14 10.7V6.5l1.4-1.7c.3-.3 0-.8-.4-.8H9c-.4 0-.6.5-.4.8L10 6.5v4.2l-5.8 7.7c-.5.7 0 1.6.8 1.6h14c.8 0 1.3-.9.8-1.6Z',
+    play: 'M8 5v14l11-7L8 5Z',
     bug: 'M20 8h-2.8a6 6 0 0 0-1.8-2l1.6-1.6L15.6 3l-2.2 2.2a6 6 0 0 0-2.8 0L8.4 3 7 4.4 8.6 6a6 6 0 0 0-1.8 2H4v2h2.1a6 6 0 0 0 0 1v1H4v2h2v1a6 6 0 0 0 .1 1H4v2h2.8a6 6 0 0 0 10.4 0H20v-2h-2.1a6 6 0 0 0 .1-1v-1h2v-2h-2v-1a6 6 0 0 0-.1-1H20V8Zm-6 8h-4v-2h4v2Zm0-4h-4v-2h4v2Z',
   };
   const sicon = name => (SICONS[name] ? `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="${SICONS[name]}"/></svg>` : '');
@@ -366,7 +367,7 @@
     if (!U.Speech.available) { toast('This browser has no text-to-speech', true); return; }
     U.Speech.stop();
     const tts = collect().tts;
-    U.Speech.say(`${tts.readNames ? 'NightOwl sent Rose x5. ' : ''}Loving the stream, keep it up!`, tts);
+    U.Speech.say(`${tts.readNames ? 'NightOwl says: ' : ''}Loving the stream, keep it up!`, tts);
   });
 
   // ---------- backup ----------

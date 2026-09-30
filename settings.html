@@ -86,8 +86,25 @@ system=1     show connection messages</span>
         <label class="field"><span>Volume of every alert sound <output id="allVolumePct"></output></span><input type="range" min="0" max="1" step="0.05" id="allVolume"></label>
         <label class="field"><span>Voice</span><select data-path="tts.voice" id="ttsVoice"></select></label>
       </div>
-      <div class="row"><button class="btn small" type="button" id="testTts">▶ Test voice</button></div>
       <p class="help keep">Tick what each kind does. <b>Show all settings</b> (top) has sound choices, per-platform sounds, filters and more.</p>
+    </section>
+
+
+    <!-- Basic + advanced: tests -->
+    <section class="card" id="sec-tests" data-nav="Test" data-ico="play">
+      <header class="card-head">
+        <span class="ico" data-ico="play"></span>
+        <div class="grow"><h2>Test</h2><p class="sub">Try alerts and the voice. Test alerts go to the chat pages open in this browser.</p></div>
+      </header>
+      <div class="row test-row">
+        <select id="testPlatform" aria-label="Test platform"><option value="twitch">Twitch</option><option value="tiktok">TikTok</option><option value="kick">Kick</option><option value="velora">Velora</option><option value="blaze">Blaze</option><option value="nimo">Nimo TV</option></select>
+        <button class="btn small" type="button" data-test="chat">💬 Chat</button>
+        <button class="btn small" type="button" data-test="follow">💙 Follow</button>
+        <button class="btn small" type="button" data-test="donation">💰 Donation</button>
+        <button class="btn small" type="button" data-test="sub">⭐ Sub</button>
+        <button class="btn small" type="button" data-test="raid">🚀 Raid</button>
+      </div>
+      <div class="row"><button class="btn small" type="button" id="testTts">▶ Test voice</button><span class="help" style="margin:0">Plays here, in the voice picked above.</span></div>
     </section>
 
     <!-- Basic: look & phone -->
@@ -262,6 +279,7 @@ system=1     show connection messages</span>
       <div class="toggles">
         <label class="check"><input type="checkbox" data-path="filters.hideCommands"> Hide !commands</label>
         <label class="check"><input type="checkbox" data-path="filters.hideBots"> Hide bot accounts</label>
+        <label class="check"><input type="checkbox" data-path="filters.hideSlurs"> Also hide slurs <em>(built-in list, with common misspellings)</em></label>
       </div>
       <div class="grid">
         <label class="field"><span>Bot accounts <em>one per line</em></span><textarea rows="5" data-path="filters.botNames" data-type="list" spellcheck="false"></textarea></label>
@@ -348,16 +366,6 @@ system=1     show connection messages</span>
       </div>
       <p class="help">Short drops reconnect quietly (a yellow banner shows the tries). If a platform still can't reconnect after 3 tries, the banner turns red and the first sound plays. UniChat tries 6 more times; if those fail too, it stops, the second sound plays and that platform's status pill turns red until you press <b>Reconnect</b> on the chat page.</p>
       <p class="help"><b>Phones</b> pause web pages in the background (another app, screen off), which drops the connections. UniChat doesn't count those as problems: when you come back it reconnects straight away and quietly, Twitch and TikTok first, then the others, and fills in the chat you missed where the platform allows it: Twitch (see above), TikTok and Kick.</p>
-      <h3>Send a test alert</h3>
-      <p class="help" style="margin-top:0">Goes to the chat pages open in this browser.</p>
-      <div class="row test-row">
-        <select id="testPlatform" aria-label="Test platform"><option value="twitch">Twitch</option><option value="tiktok">TikTok</option><option value="kick">Kick</option><option value="velora">Velora</option><option value="blaze">Blaze</option><option value="nimo">Nimo TV</option></select>
-        <button class="btn small" type="button" data-test="chat">💬 Chat</button>
-        <button class="btn small" type="button" data-test="follow">💙 Follow</button>
-        <button class="btn small" type="button" data-test="donation">💰 Donation</button>
-        <button class="btn small" type="button" data-test="sub">⭐ Sub</button>
-        <button class="btn small" type="button" data-test="raid">🚀 Raid</button>
-      </div>
     </section>
 
     <!-- Display -->
