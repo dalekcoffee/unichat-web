@@ -437,15 +437,16 @@
     /** Runs fn whenever the browser allows or blocks sound (e.g. after the first click on the page). */
     function onState(fn) { const c = context(); if (c) c.addEventListener('statechange', fn); }
 
-    function tone(c, out, { freq, start = 0, dur = 0.2, type = 'sine', gain = 0.5, slideTo = null, attack = 0.005 }) {
+    function tone(c, out, { freq, start = 0, dur = 0.2, type = 'sine', gain = 0.5, slideTo = null, slideDur = dur, attack = 0.005, hold = 0 }) {
       const t0 = c.currentTime + start;
       const osc = c.createOscillator();
       const g = c.createGain();
       osc.type = type;
       osc.frequency.setValueAtTime(freq, t0);
-      if (slideTo) osc.frequency.exponentialRampToValueAtTime(slideTo, t0 + dur);
+      if (slideTo) osc.frequency.exponentialRampToValueAtTime(slideTo, t0 + slideDur);
       g.gain.setValueAtTime(0.0001, t0);
       g.gain.exponentialRampToValueAtTime(gain, t0 + attack);
+      if (hold) g.gain.setValueAtTime(gain, t0 + attack + hold); // stays at full level a moment before fading
       g.gain.exponentialRampToValueAtTime(0.0001, t0 + dur);
       osc.connect(g).connect(out);
       osc.start(t0);
@@ -454,9 +455,10 @@
 
     // Built-in sounds are synthesized, so there are no files to ship or licence.
     const BUILTIN = {
-      pop: (c, o) => tone(c, o, { freq: 520, slideTo: 880, dur: 0.09, gain: 0.6 }),
-      blip: (c, o) => { tone(c, o, { freq: 1200, dur: 0.06, type: 'triangle', gain: 0.4 }); tone(c, o, { freq: 1600, start: 0.07, dur: 0.06, type: 'triangle', gain: 0.3 }); },
-      // Softer than the others (the follow sound): two gentle, overlapping tones with a slow start, no click.
+      // The pop and blip hold their full level for a moment, or they're too short to keep up with the others at 100%.
+      pop: (c, o) => tone(c, o, { freq: 520, slideTo: 880, slideDur: 0.09, dur: 0.11, hold: 0.025, gain: 0.6 }),
+      blip: (c, o) => { tone(c, o, { freq: 1200, dur: 0.07, hold: 0.025, type: 'triangle', gain: 0.4 }); tone(c, o, { freq: 1600, start: 0.08, dur: 0.08, hold: 0.03, type: 'triangle', gain: 0.3 }); },
+      // Two gentle, overlapping tones with a slow start, no click.
       chime: (c, o) => { tone(c, o, { freq: 880, dur: 0.5, gain: 0.143, attack: 0.02 }); tone(c, o, { freq: 1318.5, start: 0.12, dur: 0.7, gain: 0.119, attack: 0.02 }); },
       ding: (c, o) => { tone(c, o, { freq: 1568, dur: 1.0, gain: 0.45 }); tone(c, o, { freq: 3136, dur: 0.5, gain: 0.08 }); },
       bell: (c, o) => { [523.3, 1046.5, 1568, 2093].forEach((f, i) => tone(c, o, { freq: f, dur: 1.4 - i * 0.25, gain: 0.35 / (i + 1) })); },
@@ -483,6 +485,10 @@
     const BUILTIN_NAMES = { pop: 'Pop', blip: 'Blip', chime: 'Chime', ding: 'Ding', bell: 'Bell', coins: 'Coins', fanfare: 'Fanfare', levelup: 'Level up', whoosh: 'Whoosh', error: 'Alert buzz', failed: 'Failed', sparkle: 'Sparkle' };
 
     const SOUND_BOOST = 3.1;
+    // Each sound's own level, so they're all equally loud at the same volume. Measured with a model of how loud a sound
+    // seems to the ear (short-term loudness, Glasberg & Moore): a sound-level meter rates pure tones like the chime too
+    // low and buzzy ones like the coins too high. The chime sits where it sounded right; the rest match it.
+    const LEVEL = { pop: 0.29, blip: 0.382, chime: 1.176, ding: 0.313, bell: 0.163, coins: 0.73, fanfare: 0.314, levelup: 0.567, whoosh: 0.967, error: 0.581, failed: 0.407, sparkle: 0.328 };
     let limiterNode = null;
     function limiter(c) {
       if (limiterNode) return limiterNode;
@@ -498,17 +504,13 @@
 
     async function play(name, volume) {
       const c = context();
-      if (!c || c.state !== 'running' || !name || name === 'none') return;
+      if (!c || c.state !== 'running' || !name || name === 'none' || !name.startsWith('builtin:')) return;
+      const key = own(BUILTIN, name.slice(8)) ? name.slice(8) : 'pop';
       const out = c.createGain();
       // The built-in sounds are soft, so every volume gets a boost; a limiter keeps loud ones from distorting.
-      out.gain.value = Math.max(0, Math.min(1, volume == null ? 0.5 : volume)) * SOUND_BOOST;
+      out.gain.value = Math.max(0, Math.min(1, volume == null ? 0.5 : volume)) * SOUND_BOOST * LEVEL[key];
       out.connect(limiter(c));
-
-      if (name.startsWith('builtin:')) {
-        const fn = BUILTIN[name.slice(8)] || BUILTIN.pop;
-        fn(c, out);
-        return;
-      }
+      BUILTIN[key](c, out);
     }
 
     /** Decide whether an incoming event should make a sound, based on shared settings. */
@@ -560,9 +562,12 @@
   // ---------- Text-to-speech (browser's built-in voices) ----------
   const Speech = (function () {
     const synth = window.speechSynthesis;
-    // 100% on the voice slider is this share of full volume. UniChat's voices are levelled first (js/voice-worker.js).
-    const VOICE_BASE = 0.4;
-    const voiceVolume = tts => Math.max(0, Math.min(1, tts.volume == null ? 0.9 : tts.volume)) * VOICE_BASE;
+    // 100% on the voice slider is this share of full volume: as loud as any alert sound at 100% (measured the same way,
+    // see Sound's LEVEL). UniChat's voices are levelled first (js/voice-worker.js); Kore still comes out quieter than
+    // the others, so each voice has its own trim.
+    const VOICE_BASE = 0.38;
+    const VOICE_TRIM = { af_heart: 1, af_kore: 1.51, af_bella: 1.03, af_sky: 1.06 };
+    const voiceVolume = tts => Math.min(1, Math.max(0, Math.min(1, tts.volume == null ? 0.9 : tts.volume)) * VOICE_BASE * (VOICE_TRIM[kokoroId(tts.voice)] || 1));
     let queued = 0;
 
     function voices() { return synth ? synth.getVoices() : []; }
@@ -701,6 +706,6 @@
     return { available: !!synth || typeof Worker === 'function', voices, say, forEvent, prepare, willRead: (e, settings, cls) => !!lineFor(e, settings, cls), warmUp, stop, speaking, KOKORO };
   })();
 
-  const VERSION = '0.0.25';
+  const VERSION = '0.0.26';
   window.UniChat = { VERSION, api, storePin, fmtMoney, icon, esc, safeUrl, safeColor, renderEvent, connect, Sound, Speech, classify, nameHasSlur, plainText, NAMES, PLATFORMS, ALERT_KINDS, KIND_LABEL, KIND_EMOJI, fmtTime, nameHtml, avatarHtml, swapAvatar, partsHtml, shownParts, userColor, statusTone, attemptText, fmtCount, fmtDuration };
 })();
