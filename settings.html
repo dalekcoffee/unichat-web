@@ -268,17 +268,6 @@ system=1     show connection messages</span>
       <p class="help">TikTok, Velora, Blaze and Nimo TV send profile pictures with chat. Twitch and Kick don't, so UniChat looks them up by username (Twitch with <a href="https://api.ivr.fi/v2/docs" target="_blank" rel="noopener noreferrer">IVR</a>, a free public Twitch API; Kick on kick.com) and remembers them in this browser for a week. Turn profile pictures off to stop these lookups.</p>
     </section>
 
-    <!-- Experimental -->
-    <section class="card adv" id="sec-experimental" data-nav="Experimental" data-ico="flask">
-      <header class="card-head">
-        <span class="ico" data-ico="flask"></span>
-        <div class="grow"><h2>Experimental</h2><p class="sub">Features still being tried out. Leave them off and everything works as before.</p></div>
-      </header>
-      <label class="check"><input type="checkbox" data-path="tikTok.useRelay" id="useRelay"> Use my Cloudflare relay (worker) for TikTok</label>
-      <p class="help" id="relayNote"></p>
-      <p class="help">The relay keeps the Euler key on Cloudflare and shares <b>one</b> Euler connection between all your screens and your website, so this browser doesn't need the key and your free Euler quota lasts longer. Turn it off to go back to connecting straight to Euler.</p>
-    </section>
-
     <!-- Connections: live status, then each platform's settings -->
     <section class="card" id="sec-connections" data-nav="Connections" data-ico="signal">
       <header class="card-head">
@@ -314,7 +303,7 @@ system=1     show connection messages</span>
         <div class="card-body">
           <div class="grid">
             <label class="field"><span>TikTok username</span><input type="text" data-path="tikTok.username" placeholder="yourname" autocomplete="off" spellcheck="false"></label>
-            <div class="field">
+            <div class="field" id="eulerKeyField">
               <label for="eulerKey">Euler Stream API key</label>
               <div class="input-group">
                 <input type="password" id="eulerKey" data-path="tikTok.eulerKey" autocomplete="off" spellcheck="false" placeholder="paste your free key">
@@ -329,7 +318,8 @@ system=1     show connection messages</span>
             <label class="check"><input type="checkbox" data-path="tikTok.showLikes"> Show likes (quiet)</label>
             <label class="check"><input type="checkbox" data-path="tikTok.showShares"> Show shares (quiet)</label>
           </div>
-          <ol class="steps">
+          <p class="help keep hidden" id="relayKeyNote">No key needed: <b id="relayUser"></b> is read through UniChat's relay, which keeps the Euler key on Cloudflare. Any other username needs its own free key. <button class="btn small hidden" type="button" id="forgetKey">Forget the key saved in this browser</button></p>
+          <ol class="steps" id="eulerSteps">
             <li>Create a free account at <a href="https://www.eulerstream.com/" target="_blank" rel="noopener noreferrer">eulerstream.com</a>.</li>
             <li>Copy your API key from their dashboard.</li>
             <li>Paste it above and press <b>Save</b>. It stays in this browser.</li>
@@ -417,6 +407,33 @@ system=1     show connection messages</span>
     </section>
 
     <!-- Backup -->
+    <!-- Resonite: this device sends its chat to the in-game panel (only shown when this copy of UniChat has a relay) -->
+    <section class="card hidden" id="sec-resonite" data-nav="Resonite" data-ico="vr">
+      <header class="card-head">
+        <span class="ico" data-ico="vr"></span>
+        <div class="grow"><h2>Resonite</h2><p class="sub">Your chat and alerts on an in-game panel. Turn this on on the PC you play on.</p></div>
+      </header>
+      <label class="check"><input type="checkbox" id="resOn"> Send this device's chat and alerts to my Resonite panel</label>
+      <div class="grid">
+        <div class="field">
+          <label for="resKey">Send key</label>
+          <div class="input-group">
+            <input type="password" id="resKey" autocomplete="off" spellcheck="false" placeholder="paste your send key">
+            <button class="btn" type="button" id="resKeyShow" aria-controls="resKey">Show</button>
+          </div>
+        </div>
+      </div>
+      <p class="help keep" id="resState"></p>
+      <div class="field hidden" id="resReadBox">
+        <label for="resRead">Your panel's address (paste into the WebsocketClient's URL in Resonite)</label>
+        <div class="input-group">
+          <input type="text" id="resRead" readonly spellcheck="false">
+          <button class="btn" type="button" id="resCopy">Copy</button>
+        </div>
+      </div>
+      <p class="help">Only one device sends at a time, while its chat page is open; turning this on somewhere else takes over. Saved straight away, in this browser only: the key never goes into links or backups. The panel's address can only read your chat, which is public anyway. The voice keeps playing on this device.</p>
+    </section>
+
     <section class="card" id="sec-backup" data-nav="Backup" data-ico="backup">
       <header class="card-head">
         <span class="ico" data-ico="backup"></span>

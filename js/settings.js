@@ -63,7 +63,7 @@
     speaker: 'M3 9v6h4l5 5V4L7 9H3Zm13.5 3a4.5 4.5 0 0 0-2.5-4v8a4.5 4.5 0 0 0 2.5-4ZM14 3.2v2.1a7 7 0 0 1 0 13.4v2.1a9 9 0 0 0 0-17.6Z',
     display: 'M21 3H3a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h5v2h8v-2h5a2 2 0 0 0 2-2V5a2 2 0 0 0-2-2Zm0 14H3V5h18v12Z',
     backup: 'M19 9h-4V3H9v6H5l7 7 7-7ZM5 18v2h14v-2H5Z',
-    flask: 'M19.8 18.4 14 10.7V6.5l1.4-1.7c.3-.3 0-.8-.4-.8H9c-.4 0-.6.5-.4.8L10 6.5v4.2l-5.8 7.7c-.5.7 0 1.6.8 1.6h14c.8 0 1.3-.9.8-1.6Z',
+    vr: 'M4 6h16a3 3 0 0 1 3 3v6a3 3 0 0 1-3 3h-4.2l-2.3-2.7a2 2 0 0 0-3 0L8.2 18H4a3 3 0 0 1-3-3V9a3 3 0 0 1 3-3Z',
     play: 'M8 5v14l11-7L8 5Z',
     bug: 'M20 8h-2.8a6 6 0 0 0-1.8-2l1.6-1.6L15.6 3l-2.2 2.2a6 6 0 0 0-2.8 0L8.4 3 7 4.4 8.6 6a6 6 0 0 0-1.8 2H4v2h2.1a6 6 0 0 0 0 1v1H4v2h2v1a6 6 0 0 0 .1 1H4v2h2.8a6 6 0 0 0 10.4 0H20v-2h-2.1a6 6 0 0 0 .1-1v-1h2v-2h-2v-1a6 6 0 0 0-.1-1H20V8Zm-6 8h-4v-2h4v2Zm0-4h-4v-2h4v2Z',
   };
@@ -72,6 +72,8 @@
   $$('[data-icon]').forEach(el => { el.innerHTML = U.icon(el.dataset.icon); });
   $('#linkNotice').classList.toggle('hidden', !fromLink);
   $('#appVersion').textContent = 'v' + U.VERSION;
+
+  if (Store.RELAY_URL) $('#sec-resonite').classList.remove('hidden'); else $('#sec-resonite').remove();
 
   // Section menu (sidebar on wide screens, scrolling chips on phones). Buttons, not "#" links: the part of the
   // address after "#" can hold your settings, so the page never changes it.
@@ -228,6 +230,7 @@
     showSize(saved.display.fontSize || 16);
     applyTheme(saved.display.theme);
     markPlatformCards();
+    showRelayKeyNote();
     $('#savebar').classList.toggle('show', false);
     updateLinks();
     showNimoPick();
@@ -468,11 +471,83 @@
     }
   }
 
-  // ---------- Experimental: TikTok relay (its address is built into this copy of UniChat, see store.js) ----------
-  $('#useRelay').disabled = !Store.RELAY_URL;
-  $('#relayNote').textContent = Store.RELAY_URL
-    ? 'Your relay is built into this copy of UniChat. Turn this on once it is set up.'
-    : "No relay address is built into this copy of UniChat yet, so this can't be turned on.";
+  // ---------- TikTok: the relay holds the Euler key for its username (see store.js); anyone else needs their own ----------
+  function showRelayKeyNote() {
+    const relay = Store.relayServes($('[data-path="tikTok.username"]').value || Store.DEFAULTS.tikTok.username);
+    $('#eulerKeyField').classList.toggle('hidden', relay);
+    $('#eulerSteps').classList.toggle('hidden', relay);
+    $('#relayKeyNote').classList.toggle('hidden', !relay);
+    $('#relayUser').textContent = '@' + Store.RELAY_TIKTOK_USER;
+    $('#forgetKey').classList.toggle('hidden', !relay || !$('#eulerKey').value);
+  }
+  $('[data-path="tikTok.username"]').addEventListener('input', showRelayKeyNote);
+  $('#forgetKey').addEventListener('click', () => {
+    $('#eulerKey').value = '';
+    changed();
+    showRelayKeyNote();
+    toast('Press Save to forget the key in this browser.');
+  });
+
+  // ---------- Resonite: this device sends its chat to the in-game panel (the chat page does it, see resonite.js) ----------
+  // Saved straight away and kept apart from the settings (Store.resonite), so the key never goes into links or backups.
+  let resReport = null; // the latest word from a chat page in this browser
+  const RES_TEXT = {
+    connecting: () => 'Connecting to the relay…',
+    sending: r => `Sending to Resonite · ${r.readers ? `${r.readers} panel${r.readers === 1 ? '' : 's'} reading` : 'no panel connected yet'}`,
+    retrying: r => `Can't reach the relay (${r.reason || 'no answer'}). Trying again by itself…`,
+    badkey: () => 'The relay refused this send key. Check that it was pasted in full (and that it is the current one).',
+    replaced: () => 'Another device (or chat tab) took over sending. Turn this off and on again here to take it back.',
+    refused: r => `The relay refused: ${r.reason || 'not set up for Resonite yet'}.`,
+    nokey: () => 'Paste your send key to start.',
+    off: () => 'Not sending from this device.',
+  };
+  function showResState() {
+    const on = $('#resOn').checked, key = $('#resKey').value.trim();
+    let text;
+    if (!on) text = RES_TEXT.off();
+    else if (key.length < 16) text = RES_TEXT.nokey();
+    else if (!resReport || resReport.state === 'off' || resReport.state === 'nokey') text = 'Open the chat page on this device to start sending.';
+    else text = (Object.prototype.hasOwnProperty.call(RES_TEXT, resReport.state) ? RES_TEXT[resReport.state] : RES_TEXT.connecting)(resReport);
+    $('#resState').textContent = text;
+  }
+  async function showReadAddress() {
+    const key = $('#resKey').value.trim();
+    const box = $('#resReadBox');
+    if (key.length < 16 || !(window.crypto && crypto.subtle)) { box.classList.add('hidden'); return; }
+    const read = await Store.resonite.readKey(key);
+    if ($('#resKey').value.trim() !== key) return; // typed on meanwhile
+    $('#resRead').value = Store.relayAddress(`/room/${Store.RESONITE_ROOM}/read?key=${read}&lines=15`);
+    box.classList.remove('hidden');
+  }
+  function saveResonite() {
+    try { Store.resonite.save({ on: $('#resOn').checked, key: $('#resKey').value }); }
+    catch (err) { toast(err.message, true); return; }
+    resReport = null;
+    showResState();
+    showReadAddress();
+  }
+  if (Store.RELAY_URL) {
+    const res = Store.resonite.load();
+    $('#resOn').checked = res.on;
+    $('#resKey').value = res.key;
+    $('#resOn').addEventListener('change', saveResonite);
+    $('#resKey').addEventListener('change', saveResonite);
+    $('#resKey').addEventListener('input', () => { showResState(); showReadAddress(); });
+    $('#resKeyShow').addEventListener('click', () => {
+      const input = $('#resKey');
+      input.type = input.type === 'password' ? 'text' : 'password';
+      $('#resKeyShow').textContent = input.type === 'password' ? 'Show' : 'Hide';
+      $('#resKeyShow').setAttribute('aria-pressed', String(input.type === 'text'));
+    });
+    $('#resCopy').addEventListener('click', () => {
+      const input = $('#resRead');
+      const done = () => toast('Copied. Paste it into the URL of the WebsocketClient on your Resonite panel.');
+      if (navigator.clipboard && window.isSecureContext) navigator.clipboard.writeText(input.value).then(done, () => { input.select(); document.execCommand('copy'); done(); });
+      else { input.select(); document.execCommand('copy'); done(); }
+    });
+    showResState();
+    showReadAddress();
+  }
 
   // ---------- TikTok: Euler connections opened today (written by the chat page, see tiktok.js) ----------
   function showTikTokCount() {
@@ -510,6 +585,9 @@
           <td><b>${U.esc(s.label)}</b> <span class="detail">${U.esc([s.detail, ...extra, t.note].filter(Boolean).join(' · '))}</span></td>
         </tr>`;
         }).join('') || '<tr><td class="help keep">No platforms set up.</td></tr>';
+      } else if (m.type === 'resonite' && Store.RELAY_URL) {
+        resReport = { state: String(m.state || ''), readers: Math.max(0, Math.floor(Number(m.readers) || 0)), reason: String(m.reason || '').slice(0, 200) };
+        showResState();
       } else if (m.type === 'diag' && typeof m.line === 'string') {
         logs.unshift(m.line.slice(0, 1000));
         logs.length = Math.min(logs.length, 100);
@@ -517,6 +595,7 @@
       }
     });
     channel.postMessage({ type: 'hello?' });
+    channel.postMessage({ type: 'resonite?' });
   }
 
   applyMode(prefs.get('unichat.web.settingsAll', false) === true);

@@ -198,7 +198,7 @@
 
   let notLiveSince = 0;
 
-  // How many Euler connections were opened today (UTC), by this browser or by your relay, so it can be compared with the
+  // How many Euler connections were opened today (UTC), by this browser or by the relay, so it can be compared with the
   // usage shown in your Euler dashboard. Settings → TikTok shows it.
   const COUNT_KEY = 'unichat.web.tiktokCount';
   const utcDay = () => new Date().toISOString().slice(0, 10);
@@ -211,8 +211,9 @@
     } catch { /* storage blocked: no counter */ }
   }
 
-  const RELAY_URL = (window.UniChatStore && window.UniChatStore.RELAY_URL) || '';
-  const useRelay = s => s.tikTok.useRelay === true && !!RELAY_URL;
+  // DalekCoffee's TikTok goes through the relay (it holds the Euler key, see store.js); any other username needs its own key.
+  const Store = window.UniChatStore;
+  const useRelay = s => !!(Store && Store.relayServes(s.tikTok.username));
 
   registerConnector({
     id: 'tiktok',
@@ -228,10 +229,10 @@
       const user = s.tikTok.username;
       const viaRelay = useRelay(s);
       return new Promise((resolve, reject) => {
-        // Directly to Euler with the key saved in this browser, or (experimental) to your own relay, which holds the key
-        // and shares one Euler connection between all your pages.
+        // Directly to Euler with the key saved in this browser, or to the relay, which holds the key and shares one Euler
+        // connection between all pages.
         const url = viaRelay
-          ? `${RELAY_URL}?user=${encodeURIComponent(user)}`
+          ? Store.relayAddress(`/?user=${encodeURIComponent(user)}`)
           : `wss://ws.eulerstream.com?uniqueId=${encodeURIComponent(user)}&apiKey=${encodeURIComponent(s.tikTok.eulerKey)}`;
         if (!viaRelay) countConnection('browser');
         const ws = new WebSocket(url);
@@ -244,7 +245,7 @@
         const idleTimer = setInterval(() => {
           // A live TikTok sends viewer counts every few seconds; 3 minutes of silence means the link is stuck. The relay
           // also says hello every 30 seconds, so 90 seconds without a word from it means it's gone.
-          if (viaRelay && Date.now() - lastData > 90000) finish(new ConnectorError('No word from your relay for 90 seconds'));
+          if (viaRelay && Date.now() - lastData > 90000) finish(new ConnectorError('No word from the relay for 90 seconds'));
           else if (gotData && Date.now() - lastData > 180000) finish(new ConnectorError('No TikTok data for 3 minutes'));
         }, 30000);
 
@@ -256,7 +257,7 @@
           if (err) reject(err); else resolve();
         }
         signal.addEventListener('abort', () => finish(), { once: true });
-        // Back from the background: a live TikTok (or your relay) sends something every few seconds, so 20 seconds of
+        // Back from the background: a live TikTok (or the relay) sends something every few seconds, so 20 seconds of
         // silence means the connection didn't survive. Not live yet (nothing received): nothing to check.
         watchResume(ctx, { lastData: () => (gotData || viaRelay ? lastData : Infinity), waitMs: 20000, fail: finish });
 
@@ -269,7 +270,7 @@
           let payload;
           try { payload = JSON.parse(ev.data); } catch { return; }
           if (viaRelay && payload && typeof payload === 'object' && payload.relay && typeof payload.relay === 'object') { relayStatus(payload.relay); return; }
-          if (!gotData) { gotData = true; notLiveSince = 0; ctx.connected(viaRelay ? `@${user} · via your relay` : `@${user}`); }
+          if (!gotData) { gotData = true; notLiveSince = 0; ctx.connected(viaRelay ? `@${user} · via the relay` : `@${user}`); }
           const list = Array.isArray(payload && payload.messages) ? payload.messages : Array.isArray(payload) ? payload : [payload];
           for (const m of list) {
             if (!m || typeof m !== 'object') continue;
@@ -287,16 +288,16 @@
             case 'offline':
               ctx.setLive(false);
               gotData = false;
-              ctx.waiting(`@${user} isn't live right now (your relay keeps checking)`);
+              ctx.waiting(`@${user} isn't live right now (the relay keeps checking)`);
               break;
             case 'open':
-              ctx.connected(`@${user} · via your relay`);
+              ctx.connected(`@${user} · via the relay`);
               break;
             case 'error':
-              finish(new ConnectorError(`Your relay: ${reason || 'Euler refused the connection'}`, { config: true }));
+              finish(new ConnectorError(`The relay: ${reason || 'Euler refused the connection'}`, { config: true }));
               break;
             case 'paused':
-              finish(new ConnectorError(`Your relay: ${reason || 'paused for today to protect your Euler key'}`, { config: true, retryAfterMs: 1800000 }));
+              finish(new ConnectorError(`The relay: ${reason || 'paused for today to protect your Euler key'}`, { config: true, retryAfterMs: 1800000 }));
               break;
             default: // 'connecting', heartbeats: nothing to show
           }
@@ -308,9 +309,9 @@
           if (viaRelay) {
             // 4403: the relay refused this page (wrong username or site); 4429: too many pages connected.
             const why = String(ev.reason || '').slice(0, 200);
-            if (ev.code === 4403) finish(new ConnectorError(`Your relay refused the connection${why ? ': ' + why : ''}`, { config: true }));
-            else if (ev.code === 4429) finish(new ConnectorError(`Your relay is busy${why ? ': ' + why : ''}`, { retryAfterMs: 60000 }));
-            else finish(new ConnectorError(why || (ev.code === 1006 ? "Can't reach your relay" : `Relay connection closed (${ev.code})`)));
+            if (ev.code === 4403) finish(new ConnectorError(`The relay refused the connection${why ? ': ' + why : ''}`, { config: true }));
+            else if (ev.code === 4429) finish(new ConnectorError(`The relay is busy${why ? ': ' + why : ''}`, { retryAfterMs: 60000 }));
+            else finish(new ConnectorError(why || (ev.code === 1006 ? "Can't reach the relay" : `Relay connection closed (${ev.code})`)));
             return;
           }
           if (ev.code === 4404 || ev.code === 4005) {

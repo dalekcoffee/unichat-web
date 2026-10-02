@@ -17,8 +17,7 @@
     twitch: { enabled: true, channel: 'dalekcoffee',
       catchUp: true }, // after a reconnect, fill in chat missed meanwhile (from recent-messages.robotty.de, see twitch.js)
     tikTok: { enabled: true, username: 'dalekcoffee', eulerKey: '', minGiftCoinsForSound: 0, showLikes: true, showShares: true, showJoins: true,
-      joinsClearSec: 5, // "joined" lines leave the chat after this long (0 = keep them)
-      useRelay: false }, // experimental: read TikTok through your own Cloudflare relay (RELAY_URL below) instead of from this browser
+      joinsClearSec: 5 }, // "joined" lines leave the chat after this long (0 = keep them)
     kick: { enabled: true, channel: 'dalekcoffee', chatroomId: 0 }, // chatroomId: only when kick.com blocks the automatic lookup
     velora: { enabled: true, channel: 'dalek' },
     blaze: { enabled: true, channel: 'dalekcoffee' },
@@ -76,10 +75,38 @@
     },
   };
 
-  // Experimental TikTok relay: a Cloudflare Worker that holds the Euler key and shares one Euler connection. Built in rather
-  // than a setting, so a link or settings file can't point the page anywhere else. Empty = not set up yet. It must also be
-  // listed in connect-src in index.html and overlay.html.
-  const RELAY_URL = '';
+  // DalekCoffee's relay: a Cloudflare Worker that holds the Euler key for RELAY_TIKTOK_USER (so that TikTok needs no key in
+  // the browser, and every screen shares one Euler connection) and passes a chat page's lines to the Resonite panel.
+  // Built in rather than a setting, so a link or settings file can't point the page anywhere else. Empty = not set up
+  // yet. It must also be listed in connect-src in index.html and overlay.html.
+  const RELAY_URL = 'wss://unirelay.dalek.coffee';
+  const RELAY_TIKTOK_USER = 'dalekcoffee'; // the only TikTok username the relay serves; anyone else uses their own Euler key
+  const RESONITE_ROOM = 'dalek';
+  const relayAddress = path => RELAY_URL.replace(/\/+$/, '') + path;
+  /** True when this TikTok username is read through the relay (no Euler key needed). */
+  const relayServes = username => !!RELAY_URL && normalizeTikTok(username).toLowerCase() === RELAY_TIKTOK_USER; // TikTok names ignore case
+
+  // Resonite (Settings → Resonite): whether THIS device sends its chat to the relay, and the send key. Kept apart from the
+  // settings, so it never ends up in links, settings files or backups, and the other devices don't send too.
+  const RESONITE_KEY = 'unichat.web.resonite';
+  const resonite = {
+    load() {
+      let v = null;
+      try { v = JSON.parse(localStorage.getItem(RESONITE_KEY) || 'null'); } catch { /* blocked or damaged */ }
+      v = isObj(v) ? v : {};
+      return { on: v.on === true, key: typeof v.key === 'string' ? v.key.trim().slice(0, 200) : '' };
+    },
+    save(v) {
+      try { localStorage.setItem(RESONITE_KEY, JSON.stringify({ on: v.on === true, key: String(v.key || '').trim().slice(0, 200) })); }
+      catch { throw new Error('This browser blocked saving (private mode?)'); }
+    },
+    STORAGE_KEY: RESONITE_KEY,
+    /** The panel's read key: the start of SHA-256("unichat-resonite-read:" + send key), base64url (the relay does the same). */
+    async readKey(sendKey) {
+      const hash = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(`unichat-resonite-read:${sendKey}`));
+      return btoa(String.fromCharCode(...new Uint8Array(hash))).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '').slice(0, 32);
+    },
+  };
 
   const KIND_KEYS = Object.keys(DEFAULTS.alerts.kinds);
   const clone = o => JSON.parse(JSON.stringify(o));
@@ -314,8 +341,8 @@
     delete rest.velora.channel;
     delete rest.blaze.channel;
     delete rest.nimo.channel;
-    if (includeKey && rest.tikTok.eulerKey) {
-      // keep it (after the #, so it's never sent to the website)
+    if (includeKey && rest.tikTok.eulerKey && !relayServes(s.tikTok.username)) {
+      // keep it (after the #, so it's never sent to the website); a username the relay serves doesn't need it
     } else {
       delete rest.tikTok.eulerKey;
     }
@@ -358,7 +385,7 @@
    */
   function exportJson(settings, includeKey) {
     const s = normalize(merge(DEFAULTS, settings));
-    if (!includeKey || !s.tikTok.eulerKey) delete s.tikTok.eulerKey;
+    if (!includeKey || !s.tikTok.eulerKey || relayServes(s.tikTok.username)) delete s.tikTok.eulerKey;
     return JSON.stringify({ app: 'UniChat Web', exported: new Date().toISOString(), settings: s }, null, 2);
   }
 
@@ -370,5 +397,5 @@
     return save(merge(loadSaved(), migrate(parsed)));
   }
 
-  window.UniChatStore = { KEY, DEFAULTS, RELAY_URL, load, loadSaved, save, exportJson, importJson, normalizeTwitch, normalizeTikTok, normalizeKick, normalizeVelora, normalizeBlaze, normalizeNimo, shareUrl, hasUrlConfig };
+  window.UniChatStore = { KEY, DEFAULTS, RELAY_URL, RELAY_TIKTOK_USER, RESONITE_ROOM, relayAddress, relayServes, resonite, load, loadSaved, save, exportJson, importJson, normalizeTwitch, normalizeTikTok, normalizeKick, normalizeVelora, normalizeBlaze, normalizeNimo, shareUrl, hasUrlConfig };
 })();
