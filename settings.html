@@ -44,8 +44,8 @@
           <div class="link-btns"><button class="btn small" type="button" data-copy="overlayLink">Copy</button><a class="btn small" id="overlayOpen" href="overlay.html" target="_blank" rel="noopener noreferrer">Open</a></div>
         </div>
       </div>
-      <label class="check"><input type="checkbox" id="linkIncludesKey"> Include my TikTok (Euler) key in these links</label>
-      <p class="help">Leave this off for links you share or embed on a website: anyone with the key can use your free Euler quota. Turn it on for your own bookmarks on other devices. Everything after the <code>#</code> stays in the browser and is never sent to the website hosting UniChat.</p>
+      <label class="check" id="linkKeyRow"><input type="checkbox" id="linkIncludesKey"> Include my TikTok (Euler) key in these links</label>
+      <p class="help" id="linkKeyHelp">Leave this off for links you share or embed on a website: anyone with the key can use your free Euler quota. Turn it on for your own bookmarks on other devices. Everything after the <code>#</code> stays in the browser and is never sent to the website hosting UniChat.</p>
       <details class="adv">
         <summary>Overlay &amp; embed options</summary>
         <p class="help">Use the overlay link as an OBS <b>Browser</b> source, or embed it on a website with an <code>&lt;iframe&gt;</code> (without your key). Add options to the link, e.g. <code>&amp;fade=20&amp;size=22&amp;chat=0</code>:</p>
@@ -318,7 +318,10 @@ system=1     show connection messages</span>
             <label class="check"><input type="checkbox" data-path="tikTok.showLikes"> Show likes (quiet)</label>
             <label class="check"><input type="checkbox" data-path="tikTok.showShares"> Show shares (quiet)</label>
           </div>
-          <p class="help keep hidden" id="relayKeyNote">No key needed: <b id="relayUser"></b> is read through UniChat's relay, which keeps the Euler key on Cloudflare. Any other username needs its own free key. <button class="btn small hidden" type="button" id="forgetKey">Forget the key saved in this browser</button></p>
+          <p class="help keep hidden" id="relayKeyNote">No key needed: <b id="relayUser"></b> is read through UniChat's relay, which keeps the Euler key on Cloudflare. If the relay is ever down, switch on your own key below.</p>
+          <label class="check hidden" id="ownKeyRow"><input type="checkbox" id="ownKey"> Use my own Euler key instead of the relay</label>
+          <p class="help keep hidden" id="ownKeyWhy"></p>
+          <p class="help keep hidden" id="savedKeyNote">A backup key is saved in this browser. It's only used while the switch above is on. <button class="btn small" type="button" id="forgetKey">Forget it</button></p>
           <ol class="steps" id="eulerSteps">
             <li>Create a free account at <a href="https://www.eulerstream.com/" target="_blank" rel="noopener noreferrer">eulerstream.com</a>.</li>
             <li>Copy your API key from their dashboard.</li>

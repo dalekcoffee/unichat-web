@@ -211,9 +211,10 @@
     } catch { /* storage blocked: no counter */ }
   }
 
-  // DalekCoffee's TikTok goes through the relay (it holds the Euler key, see store.js); any other username needs its own key.
+  // DalekCoffee's TikTok goes through the relay (it holds the Euler key, see store.js) unless Settings → TikTok → "Use my
+  // own Euler key" is on (a backup for when the relay is down); any other username always needs its own key.
   const Store = window.UniChatStore;
-  const useRelay = s => !!(Store && Store.relayServes(s.tikTok.username));
+  const useRelay = s => !!(Store && Store.usesRelay(s));
 
   registerConnector({
     id: 'tiktok',

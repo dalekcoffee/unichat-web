@@ -230,7 +230,8 @@
     showSize(saved.display.fontSize || 16);
     applyTheme(saved.display.theme);
     markPlatformCards();
-    showRelayKeyNote();
+    ownKeyChoice = saved.tikTok.ownKey === true;
+    showTikTokKey();
     $('#savebar').classList.toggle('show', false);
     updateLinks();
     showNimoPick();
@@ -249,6 +250,7 @@
       } else v = el.value;
       setPath(s, el.dataset.path, v);
     });
+    s.tikTok.ownKey = ownKeyChoice; // its box is forced on (and locked) for usernames the relay doesn't serve
     return s;
   }
 
@@ -300,6 +302,10 @@
     const s = collect();
     const chat = Store.shareUrl(s, 'index.html', keyBox.checked);
     const overlay = Store.shareUrl(s, 'overlay.html', keyBox.checked);
+    // Links that read TikTok through the relay never carry a key, so the choice is hidden then.
+    const relay = Store.usesRelay(s);
+    $('#linkKeyRow').classList.toggle('hidden', relay);
+    $('#linkKeyHelp').classList.toggle('hidden', relay);
     $('#chatLink').value = chat;
     $('#overlayLink').value = overlay;
     $('#chatOpen').href = chat;
@@ -471,20 +477,38 @@
     }
   }
 
-  // ---------- TikTok: the relay holds the Euler key for its username (see store.js); anyone else needs their own ----------
-  function showRelayKeyNote() {
-    const relay = Store.relayServes($('[data-path="tikTok.username"]').value || Store.DEFAULTS.tikTok.username);
-    $('#eulerKeyField').classList.toggle('hidden', relay);
-    $('#eulerSteps').classList.toggle('hidden', relay);
-    $('#relayKeyNote').classList.toggle('hidden', !relay);
+  // ---------- TikTok: the relay holds the Euler key for its username (see store.js) ----------
+  // "Use my own Euler key" (tikTok.ownKey) is the backup for when the relay is down: off by default for the relay's
+  // username, and always on (locked) for any other username, which the relay doesn't serve.
+  let ownKeyChoice = false; // what was picked for the relay's username (kept while another name is typed)
+  function showTikTokKey() {
+    const box = $('#ownKey');
+    const relayName = Store.relayServes($('[data-path="tikTok.username"]').value || Store.DEFAULTS.tikTok.username);
+    const own = !relayName || ownKeyChoice;
+    box.checked = own;
+    box.disabled = !relayName;
+    $('#ownKeyRow').classList.toggle('hidden', !Store.RELAY_URL);
+    $('#relayKeyNote').classList.toggle('hidden', !relayName || own);
     $('#relayUser').textContent = '@' + Store.RELAY_TIKTOK_USER;
-    $('#forgetKey').classList.toggle('hidden', !relay || !$('#eulerKey').value);
+    $('#ownKeyWhy').classList.toggle('hidden', !Store.RELAY_URL || !own);
+    $('#ownKeyWhy').textContent = relayName
+      ? 'Connecting straight to Euler with your key, not through the relay. Turn this off to go back to the relay.'
+      : `Only @${Store.RELAY_TIKTOK_USER} can use the relay, so other usernames need their own free key.`;
+    $('#eulerKeyField').classList.toggle('hidden', !own);
+    $('#eulerSteps').classList.toggle('hidden', !own);
+    $('#savedKeyNote').classList.toggle('hidden', own || !$('#eulerKey').value);
   }
-  $('[data-path="tikTok.username"]').addEventListener('input', showRelayKeyNote);
+  $('[data-path="tikTok.username"]').addEventListener('input', showTikTokKey);
+  $('#ownKey').addEventListener('change', () => {
+    if ($('#ownKey').disabled) return;
+    ownKeyChoice = $('#ownKey').checked;
+    showTikTokKey();
+    changed();
+  });
   $('#forgetKey').addEventListener('click', () => {
     $('#eulerKey').value = '';
     changed();
-    showRelayKeyNote();
+    showTikTokKey();
     toast('Press Save to forget the key in this browser.');
   });
 

@@ -710,6 +710,6 @@
     return { available: !!synth || typeof Worker === 'function', voices, say, forEvent, prepare, willRead: (e, settings, cls) => !!lineFor(e, settings, cls), warmUp, stop, speaking, KOKORO };
   })();
 
-  const VERSION = '0.0.29';
+  const VERSION = '0.0.30';
   window.UniChat = { VERSION, api, storePin, fmtMoney, icon, esc, safeUrl, safeColor, renderEvent, connect, Sound, Speech, classify, nameHasSlur, plainText, NAMES, PLATFORMS, ALERT_KINDS, KIND_LABEL, KIND_EMOJI, fmtTime, nameHtml, avatarHtml, swapAvatar, partsHtml, shownParts, userColor, statusTone, attemptText, fmtCount, fmtDuration };
 })();
