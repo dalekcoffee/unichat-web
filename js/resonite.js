@@ -105,7 +105,7 @@
       try { m = JSON.parse(ev.data); } catch { return; }
       const b = m && typeof m === 'object' ? m.bridge : null;
       if (!b || typeof b !== 'object') return;
-      const readers = Math.max(0, Math.floor(Number(b.readers) || 0));
+      const readers = Math.min(99, Math.max(0, Math.floor(Number(b.readers)) || 0)); // a count, never shown as more than 99
       if (b.state === 'ok') {
         authed = true;
         attempt = 0;

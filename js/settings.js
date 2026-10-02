@@ -610,7 +610,7 @@
         </tr>`;
         }).join('') || '<tr><td class="help keep">No platforms set up.</td></tr>';
       } else if (m.type === 'resonite' && Store.RELAY_URL) {
-        resReport = { state: String(m.state || ''), readers: Math.max(0, Math.floor(Number(m.readers) || 0)), reason: String(m.reason || '').slice(0, 200) };
+        resReport = { state: String(m.state || ''), readers: Math.min(99, Math.max(0, Math.floor(Number(m.readers)) || 0)), reason: String(m.reason || '').slice(0, 200) };
         showResState();
       } else if (m.type === 'diag' && typeof m.line === 'string') {
         logs.unshift(m.line.slice(0, 1000));
