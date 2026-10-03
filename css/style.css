@@ -528,6 +528,15 @@ body.no-avatars .ap-item .avatar { display: none; }
   .panel-tabs button { padding: 4px 8px; }
 }
 .panel-tabs button.active .count-badge { background: var(--warn); color: #1a1200; }
+/* Alerts / Questions (and the top bar's Alerts button) with something not ticked off yet: the whole pill pulses until
+   it's all cleared. */
+.panel-tabs button.pulsing, .iconbtn.pulsing { border-color: var(--warn); color: var(--text); animation: pill-pulse 1.4s ease-in-out infinite; }
+.iconbtn.pulsing { animation-name: pill-pulse, glow; }
+.panel-tabs button.pulsing .count-badge { background: var(--warn); color: #1a1200; }
+@keyframes pill-pulse {
+  0%, 100% { background-color: color-mix(in srgb, var(--warn) 8%, transparent); }
+  50% { background-color: color-mix(in srgb, var(--warn) 40%, transparent); }
+}
 
 /* ---------- Big alert popup ---------- */
 .popup-layer {
@@ -1032,6 +1041,8 @@ body.settings .sr-controls select, body.settings .test-row select { width: auto;
 
 @media (prefers-reduced-motion: reduce) {
   .msg, .popup, .savebar, .dot, .pill .pname, .sound-ico, .clear-btn.armed::after { animation: none !important; transition: none !important; }
+  /* Only the colour pulses (nothing moves or grows), and more slowly. */
+  .panel-tabs button.pulsing, .iconbtn.pulsing { animation: pill-pulse 2.4s ease-in-out infinite; }
 }
 
 /* ---------- Settings: Basic (default) vs "Show all settings" ---------- */

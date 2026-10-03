@@ -146,7 +146,7 @@
   function updatePercents() {
     $$('[data-pct-for]').forEach(el => {
       const input = $(`[data-path="${el.dataset.pctFor}"]`);
-      if (input) el.textContent = Math.round(Number(input.value) * 100) + '%';
+      if (input) el.textContent = Math.round(Number(input.value) / (Number(input.max) || 1) * 100) + '%'; // the slider's end is 100%
     });
     $$('[data-rate-for]').forEach(el => {
       const input = $(`[data-path="${el.dataset.rateFor}"]`);

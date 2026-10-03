@@ -609,10 +609,13 @@
       const badge = document.querySelector(`[data-count="${tab}"]`);
       badge.textContent = n > 99 ? '99+' : String(n);
       badge.classList.toggle('zero', n === 0);
+      // Alerts and Questions pulse until everything in them is ticked off (Pinned is your own list, so it stays still).
+      if (tab !== 'pins') badge.closest('button').classList.toggle('pulsing', n > 0);
     }
     const total = open.alerts + open.questions;
     alertCount.textContent = total > 99 ? '99+' : String(total);
     alertCount.classList.toggle('zero', total === 0);
+    alertCount.closest('button').classList.toggle('pulsing', total > 0);
   }
 
   function setPins(list) {
@@ -1097,7 +1100,7 @@
        ${body ? `<div class="p-msg">${body}</div>` : ''}
        <div class="p-hint">Click to close${popupQueue.length ? ` · ${popupQueue.length} more` : ''}</div>`;
     popupLayer.classList.add('show');
-    popupTimer = setTimeout(hidePopup, ((settings.popup && settings.popup.seconds) || 6) * 1000);
+    popupTimer = setTimeout(hidePopup, ((settings.popup && settings.popup.seconds) || 18) * 1000);
   }
 
   function hidePopup() {

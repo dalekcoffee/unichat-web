@@ -13,11 +13,11 @@
   // This copy of UniChat opens on DalekCoffee's channels, so a new browser only needs the Euler key. A blank name means
   // "use the default"; each platform's switch in Settings turns it off.
   const DEFAULTS = {
-    settingsVersion: 7, // bumped when a default changes in a way saved settings should follow (see migrate)
+    settingsVersion: 8, // bumped when a default changes in a way saved settings should follow (see migrate)
     twitch: { enabled: true, channel: 'dalekcoffee',
       catchUp: true }, // after a reconnect, fill in chat missed meanwhile (from recent-messages.robotty.de, see twitch.js)
     tikTok: { enabled: true, username: 'dalekcoffee', eulerKey: '', minGiftCoinsForSound: 0, showLikes: true, showShares: true, showJoins: true,
-      joinsClearSec: 5, // "joined" lines leave the chat after this long (0 = keep them)
+      joinsClearSec: 15, // "joined" lines leave the chat after this long (0 = keep them)
       ownKey: false }, // the relay's own username: connect with eulerKey instead of the relay (a backup for when it's down)
     kick: { enabled: true, channel: 'dalekcoffee', chatroomId: 0 }, // chatroomId: only when kick.com blocks the automatic lookup
     velora: { enabled: true, channel: 'dalek' },
@@ -27,7 +27,7 @@
     nimo: { enabled: true, channel: 'dalekcoffee', roomId: 1592342521 },
     alerts: {
       // Settings → Alerts & voice → Volume: turns every sound and the voice up or down together, on top of each one's own
-      // volume (1 = as set). Separate from the voice's own volume (tts.volume).
+      // volume. 1 = as set (the slider shows 50%), 2 = twice as loud (100%). Separate from the voice's own volume (tts.volume).
       masterVolume: 1,
       kinds: {
         chat: kind(true, 'builtin:pop', 0.5),
@@ -58,10 +58,11 @@
       hideSlurs: true, // the built-in list of the worst slurs (js/common.js SLURS), on top of blockedWords
     },
     highlights: { enabled: true, mentions: true, keywords: [], firstTimeChatters: true, sound: true, soundName: 'builtin:ding', volume: 0.5 },
-    popup: { enabled: true, seconds: 6, kinds: { follow: false, donation: true, sub: true, raid: true } },
+    popup: { enabled: true, seconds: 18, kinds: { follow: false, donation: true, sub: true, raid: true } },
     // Stream preview button (chat page top bar): your stream in a popup, from Beam's player (beamstream.gg/<beam>/embed).
     // Loaded only while the popup is open. TikTok LIVE can't be shown inside other sites, so Beam is the one player.
     preview: { enabled: true, beam: 'dalek' },
+    // volume: 0.9 is the usual level (the slider shows 50%), 1.8 twice as loud (100%).
     tts: { enabled: false, kinds: { follow: false, donation: true, sub: true, raid: false }, readNames: true, voice: 'kokoro:af_heart', rate: 1, volume: 0.9, maxChars: 200 },
     display: {
       fontSize: 16, showTimestamps: true, showAvatars: true, showPlatformIcons: true, showBadges: true,
@@ -201,12 +202,13 @@
     s.display.overlayVoiceDelaySec = Math.round(clamp(s.display.overlayVoiceDelaySec, 0, 120, 6));
     s.display.removeDoneAfterSec = Math.round(clamp(s.display.removeDoneAfterSec, 0, 3600, 30));
     s.display.missedHighlightSec = Math.round(clamp(s.display.missedHighlightSec, 0, 3600, 15));
-    s.popup.seconds = Math.round(clamp(s.popup.seconds, 2, 60, 6));
+    s.popup.seconds = Math.round(clamp(s.popup.seconds, 2, 60, 18));
     s.alerts.chatSoundCooldownSec = clamp(s.alerts.chatSoundCooldownSec, 0, 60, 2);
     s.alerts.quietChat.afterSec = Math.round(clamp(s.alerts.quietChat.afterSec, 5, 3600, 30));
     s.alerts.quietChat.volume = clamp(s.alerts.quietChat.volume, 0, 1, 0.6);
-    s.alerts.masterVolume = clamp(s.alerts.masterVolume, 0, 1, 1);
-    s.tikTok.joinsClearSec = Math.round(clamp(s.tikTok.joinsClearSec, 0, 3600, 5));
+    s.alerts.masterVolume = clamp(s.alerts.masterVolume, 0, 2, 1);
+    s.tts.volume = clamp(s.tts.volume, 0, 1.8, 0.9);
+    s.tikTok.joinsClearSec = Math.round(clamp(s.tikTok.joinsClearSec, 0, 3600, 15));
     for (const k of KIND_KEYS.map(n => s.alerts.kinds[n])) {
       k.volume = clamp(k.volume, 0, 1, 0.7);
       for (const p of PLATFORMS) if (typeof k.platforms[p] !== 'boolean') k.platforms[p] = true;
@@ -246,6 +248,9 @@
     if ((Number(s.settingsVersion) || 1) < 6 && isObj(s.tts) && (s.tts.voice === '' || s.tts.voice === undefined || /^se:/.test(String(s.tts.voice)))) s.tts.voice = 'kokoro:af_heart';
     // v7 (0.0.20): sub messages are read aloud too ("Name says: …"), like donations.
     if ((Number(s.settingsVersion) || 1) < 7 && isObj(s.tts) && isObj(s.tts.kinds) && s.tts.kinds.sub === false) s.tts.kinds.sub = true;
+    // v8 (0.0.32): TikTok joins and alert popups stay three times as long.
+    if ((Number(s.settingsVersion) || 1) < 8 && isObj(s.tikTok) && s.tikTok.joinsClearSec === 5) s.tikTok.joinsClearSec = 15;
+    if ((Number(s.settingsVersion) || 1) < 8 && isObj(s.popup) && s.popup.seconds === 6) s.popup.seconds = 18;
     return s;
   }
 

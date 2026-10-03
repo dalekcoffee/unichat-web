@@ -21,7 +21,7 @@
   // the Settings → Sounds "can't reconnect" sound, tries MORE_TRIES more times, then stops until Reconnect is pressed.
   const QUIET_TRIES = 3, MORE_TRIES = 6;
   const CONNECT_TIMEOUT_MS = 45000; // a try that hasn't connected by then counts as failed (timed out)
-  const RECONNECT_NOTE_MS = 5000; // "connection lost" + "reconnected" lines leave the chat this long after it's back
+  const RECONNECT_NOTE_MS = 15000; // "connection lost" + "reconnected" lines leave the chat this long after it's back
   const CONNECTION_NOTES = ['connection-lost', 'connection-failing', 'connection-stopped', 'reconnected'];
   // Phones pause a page in the background (another app, screen off) and the platforms drop its connections. Hidden at
   // least AWAY_MS counts as "was away"; a drop noticed while hidden or within RESUME_GRACE_MS of coming back is the

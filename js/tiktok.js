@@ -73,6 +73,29 @@
     return parts;
   }
 
+  /**
+   * Every line carries TikTok's own message ID when it has one, so the ones TikTok (or the relay) sends again after a
+   * reconnect are recognised and skipped, instead of showing or alerting twice. The IDs are 19-digit numbers: exact as
+   * text, but sent as plain JSON numbers they lose their last digits and two messages could look the same, so those
+   * also get the sender and the send time.
+   */
+  function messageId(d) {
+    const raw = pick(d.msgId, d.common && d.common.msgId);
+    if (typeof raw === 'string' || (typeof raw === 'number' && Number.isSafeInteger(raw))) return 'tiktok:' + String(raw).slice(0, 80);
+    if (typeof raw !== 'number' || !Number.isFinite(raw)) return undefined;
+    const u = d.user || {};
+    const who = pick(u.userId, u.id, u.uniqueId);
+    const when = pick(d.common && d.common.createTime, d.createTime);
+    return `tiktok:${raw}:${String(who === undefined ? '' : who).slice(0, 40)}:${String(when === undefined ? '' : when).slice(0, 20)}`;
+  }
+
+  // A streakable gift (type 1, e.g. Roses) sends a message on every tap and a last one when the combo is over. If that
+  // last one never comes, the gift is announced anyway this long after the last tap.
+  const STREAK_WAIT_MS = 12000;
+  // Kept for the whole page (not per connection), so a combo that ends after a reconnect isn't announced twice.
+  const streaks = new Map(); // sender + gift (+ TikTok's combo ID) → { timer, announced }
+  let giftSampled = false;
+
   function makeHandler(settings, ctx) {
     const seenKinds = new Set();
     let lastViewers = 0;
@@ -82,10 +105,7 @@
       const kind = kindOf(m);
       const d = m.data || m.payload || m;
       const s = settings;
-      // Every line carries TikTok's own message ID and send time when it has them, so the ones TikTok resends after a
-      // reconnect (gifts included) are recognised and skipped, instead of alerting twice.
-      const raw = pick(d.msgId, d.common && d.common.msgId);
-      const msgId = typeof raw === 'string' || typeof raw === 'number' ? 'tiktok:' + String(raw).slice(0, 80) : undefined;
+      const msgId = messageId(d);
       const post = e => hub.publish(Object.assign({ id: msgId, ts: sentAt(d), platform: 'tiktok' }, e));
 
       switch (kind) {
@@ -96,24 +116,47 @@
 
         case 'gift': {
           markLive();
+          if (!giftSampled) { // the first gift's fields, so Settings → Diagnostics shows what TikTok actually sends
+            giftSampled = true;
+            const sample = JSON.stringify(d);
+            hub.diagnostic(`TikTok: first gift ${sample.length > 600 ? sample.slice(0, 600) + '…' : sample}`);
+          }
           const details = d.giftDetails || d.gift || {};
           const giftType = num(pick(details.giftType, details.type, d.giftType));
           const repeatEnd = truthy(d.repeatEnd);
-          // Streakable gifts (type 1) fire on every tap; only announce once the combo finishes.
-          if (giftType === 1 && !repeatEnd) break;
           const count = Math.max(1, num(pick(d.repeatCount, d.comboCount, d.groupCount)) || 1);
           const diamonds = num(pick(details.diamondCount, d.diamondCount)) || 0;
           const coins = diamonds * count;
           const name = String(pick(details.giftName, details.name, d.giftName, 'a gift'));
           const picture = pick(imageUrl(details.giftImage), imageUrl(details.image), imageUrl(details.icon), d.giftPictureUrl);
-          post({
-            kind: 'donation', user: userOf(d, s),
+          const user = userOf(d, s);
+          const announce = () => post({
+            kind: 'donation', user,
             title: count > 1 ? `sent ${name} x${count}` : `sent ${name}`,
             amount: coins > 0 ? `${coins.toLocaleString()} coin${coins === 1 ? '' : 's'}` : undefined,
             value: coins || undefined, unit: 'coins',
             parts: picture ? [{ t: 'emote', v: name, url: picture }] : [],
             silent: coins < (s.tikTok.minGiftCoinsForSound || 0),
           });
+          if (giftType !== 1) { announce(); break; }
+          // Streakable gifts (type 1) fire on every tap; they're announced once the combo finishes (see STREAK_WAIT_MS).
+          const group = pick(d.groupId, d.comboId);
+          const key = `${user.login}|${pick(d.giftId, details.id, name)}|${typeof group === 'string' || typeof group === 'number' ? group : ''}`;
+          const streak = streaks.get(key);
+          if (streak) clearTimeout(streak.timer);
+          if (repeatEnd) {
+            streaks.delete(key);
+            if (!(streak && streak.announced)) announce(); // otherwise it was already announced when the end was late
+            break;
+          }
+          const next = { announced: false, timer: 0 };
+          next.timer = setTimeout(() => {
+            next.announced = true;
+            hub.diagnostic(`TikTok: ${name} x${count} from ${user.login || 'someone'} had no "combo over" message; announced ${STREAK_WAIT_MS / 1000} s after the last tap`);
+            announce();
+            next.timer = setTimeout(() => { if (streaks.get(key) === next) streaks.delete(key); }, 60000); // a very late end is still skipped
+          }, STREAK_WAIT_MS);
+          streaks.set(key, next);
           break;
         }
 
@@ -215,6 +258,8 @@
   // own Euler key" is on (a backup for when the relay is down); any other username always needs its own key.
   const Store = window.UniChatStore;
   const useRelay = s => !!(Store && Store.usesRelay(s));
+  // The relay keeps the last 15 minutes of chat, gifts, follows and subs for pages that reconnect (see run).
+  const REPLAY_MAX_MS = 15 * 60000, REPLAY_MARGIN_MS = 10000;
 
   registerConnector({
     id: 'tiktok',
@@ -231,14 +276,23 @@
       const viaRelay = useRelay(s);
       return new Promise((resolve, reject) => {
         // Directly to Euler with the key saved in this browser, or to the relay, which holds the key and shares one Euler
-        // connection between all pages.
+        // connection between all pages. The relay stays connected to Euler while this page reconnects (or reloads), so
+        // nothing would come again by itself: it's asked for what it passed on since this page's newest TikTok line
+        // (plus a margin). Lines already here are skipped by the hub; ones sent while you were away show as missed.
+        const newest = viaRelay ? hub.latest('tiktok') : 0;
+        const replay = newest ? Math.round(Math.min(REPLAY_MAX_MS, Math.max(0, Date.now() - newest) + REPLAY_MARGIN_MS)) : 0;
         const url = viaRelay
-          ? Store.relayAddress(`/?user=${encodeURIComponent(user)}`)
+          ? Store.relayAddress(`/?user=${encodeURIComponent(user)}${replay ? `&replay=${replay}` : ''}`)
           : `wss://ws.eulerstream.com?uniqueId=${encodeURIComponent(user)}&apiKey=${encodeURIComponent(s.tikTok.eulerKey)}`;
         if (!viaRelay) countConnection('browser');
         const ws = new WebSocket(url);
         ws.binaryType = 'arraybuffer';
-        const handle = makeHandler(s, ctx);
+        // While the relay resends older messages they say nothing about whether you're live now.
+        let replaying = false;
+        const handle = makeHandler(s, {
+          setLive: live => { if (!replaying) ctx.setLive(live); },
+          stats: v => { if (!replaying) ctx.stats(v); },
+        });
         let finished = false;
         let gotData = false;
         let lastData = Date.now();
@@ -279,12 +333,14 @@
           }
         };
         /**
-         * The relay's own notes: { state: 'connecting' | 'open' | 'offline' | 'error' | 'paused', reason, retryAt, today }.
-         * The relay keeps retrying Euler itself, so "not live" doesn't close this page's connection to it.
+         * The relay's own notes: { state: 'connecting' | 'open' | 'offline' | 'error' | 'paused', reason, retryAt, today },
+         * and { replay: 'start' | 'end' } around the messages it resends. The relay keeps retrying Euler itself, so "not
+         * live" doesn't close this page's connection to it.
          */
         function relayStatus(r) {
           const reason = typeof r.reason === 'string' ? r.reason.slice(0, 200) : '';
           if (Number.isFinite(r.today)) countConnection('relay', r.today);
+          if (r.replay === 'start' || r.replay === 'end') { replaying = r.replay === 'start'; return; } // around resent messages
           switch (r.state) {
             case 'offline':
               ctx.setLive(false);
