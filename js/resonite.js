@@ -1,7 +1,8 @@
 /* UniChat → Resonite: when Settings → Resonite is on for this device, the chat page sends its lines and alerts to the
    relay (address built in, see store.js), which passes them to your in-game panel. Only what this page shows is sent:
    chat the filters hide here isn't, an alert from a hidden viewer goes without its message, and quiet notes (joins,
-   likes, shares) stay here. Missed and caught-up lines go without a sound. One device sends at a time: the relay hands
+   likes, shares) stay here. Missed and caught-up lines go without a sound. A new alert goes when this page plays it, so
+   when it waits for its voice line the panel's banner and sound wait too. One device sends at a time: the relay hands
    over to the newest one, and the older one stops until it's turned on again. */
 (function () {
   'use strict';
@@ -13,6 +14,7 @@
   const PLATFORMS = ['twitch', 'tiktok', 'kick', 'velora', 'blaze', 'nimo'];
   const BACKOFF = [2, 4, 8, 15, 30, 60];
   const SILENT_MS = 70000; // the relay says something every 25 s: this long without a word means the link is gone
+  const HOLD_MS = 125000;  // the chat page gives up waiting for a voice line after 2 minutes
   const channel = 'BroadcastChannel' in window ? new BroadcastChannel('unichat') : null;
 
   let settings = Store.load();
@@ -22,6 +24,8 @@
   let halted = '';   // 'badkey' | 'replaced' | 'refused': wait until Settings → Resonite changes
   let report = { state: 'off' };
   let sentTones = ''; // the status last sent (statuses change often without changing the dots)
+  const held = new Map(); // id → { m, timer }: new alerts waiting until the chat page plays them
+  const played = [];      // ids the chat page played before this script saw them (it can hear first)
 
   /** Tell Settings → Resonite (in this browser) how sending is going. */
   function tell(next) {
@@ -62,13 +66,31 @@
   function snapshot() {
     const chat = [], alerts = [];
     for (const e of history) {
-      const m = pack(e);
+      const m = held.has(e.id) ? null : pack(e); // a held alert goes later, with its sound
       if (m) (m.k === 'chat' ? chat : alerts).push(Object.assign(m, { q: true }));
     }
     const status = tones();
     sentTones = JSON.stringify(status);
     return { t: 'snap', chat: chat.slice(-40), alerts: alerts.slice(-10), status };
   }
+
+  // ---------- New alerts wait until the chat page plays them (see dashboard.js) ----------
+  function release(id) {
+    const h = held.get(id);
+    if (!h) return;
+    held.delete(id);
+    clearTimeout(h.timer);
+    send({ t: 'ev', e: h.m });
+  }
+  function drop(ids) {
+    for (const id of ids) { const h = held.get(id); if (h) { clearTimeout(h.timer); held.delete(id); } }
+  }
+  window.addEventListener('unichat:alert-go', ev => {
+    const id = ev.detail;
+    if (held.has(id)) { release(id); return; }
+    played.push(id);
+    if (played.length > 50) played.shift();
+  });
 
   function send(obj) {
     if (!ws || !authed || ws.readyState !== WebSocket.OPEN) return;
@@ -157,13 +179,16 @@
           history.push(msg.event);
           if (history.length > 300) history.shift();
           const m = pack(msg.event);
-          if (m) send({ t: 'ev', e: m });
+          if (!m) break;
+          if (m.k !== 'chat' && !m.q && !played.includes(m.id)) held.set(m.id, { m, timer: setTimeout(() => release(m.id), HOLD_MS) });
+          else send({ t: 'ev', e: m });
           break;
         }
         case 'remove':
         case 'delete': {
           const ids = new Set(msg.ids || []);
           history = history.filter(e => !ids.has(e.id));
+          drop(ids);
           if (ids.size) send({ t: 'rm', ids: [...ids] });
           break;
         }

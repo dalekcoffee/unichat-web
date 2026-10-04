@@ -145,6 +145,7 @@
     // An alert read aloud in a UniChat voice waits until its line is ready, then sound, popup and voice come together.
     const line = soundOn && U.Sound.unlocked() && isAlert(e) ? U.Speech.prepare(e, settings, cls) : null;
     if (line) { holdForVoice(e, cls, line); return; }
+    if (isAlert(e)) alertGoes(e);
     const nudged = quietChatNudge(e, cls);
     if (soundOn && !nudged) U.Sound.forEvent(e, settings, cls);
     maybePopup(e);
@@ -155,6 +156,8 @@
   // Making a line takes a few seconds (longer on phones). Meanwhile the alert shows in the Alerts panel as "Processing
   // voice…"; if the line fails or takes over 2 minutes, the alert goes ahead without it (never with a device voice).
   const voicePending = new Set();
+  // The Resonite panel (resonite.js) waits for this, so its banner and sound land with this page's sound and voice.
+  const alertGoes = e => window.dispatchEvent(new CustomEvent('unichat:alert-go', { detail: e.id }));
   function holdForVoice(e, cls, line) {
     voicePending.add(e.id);
     panelEls(e.id).forEach(el => el.classList.add('voicing'));
@@ -164,6 +167,7 @@
       done = true;
       voicePending.delete(e.id);
       panelEls(e.id).forEach(el => el.classList.remove('voicing'));
+      alertGoes(e);
       if (soundOn) U.Sound.forEvent(e, settings, cls);
       maybePopup(e);
       if (player && soundOn) setTimeout(() => player.play(), 900); // after the alert sound

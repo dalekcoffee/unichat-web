@@ -565,7 +565,7 @@
     });
     $('#resCopy').addEventListener('click', () => {
       const input = $('#resRead');
-      const done = () => toast('Copied. Paste it into the URL of the WebsocketClient on your Resonite panel.');
+      const done = () => toast('Copied. Paste it into the Address field of your UniChat panel in Resonite.');
       if (navigator.clipboard && window.isSecureContext) navigator.clipboard.writeText(input.value).then(done, () => { input.select(); document.execCommand('copy'); done(); });
       else { input.select(); document.execCommand('copy'); done(); }
     });
