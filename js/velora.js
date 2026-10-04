@@ -1,11 +1,12 @@
 /* Velora (velora.tv) chat, read as a guest over Velora's documented chat socket, straight from this browser.
-   No account or login: chat (with pictures, colours and roles), replies, raids, channel-point redemptions and
+   No account or login: chat (with pictures, colours, roles and emotes), replies, raids, channel-point redemptions and
    moderation. Follows, subs and Volts tips are only sent to apps the streamer has logged in to, so they're not
-   included, and emotes show as their :names: (Velora only lets its own site read the emote list).
-   Unrecognised event and card types are listed in Settings → Diagnostics. */
+   included. Velora only lets its own site read its emote list, so the list comes through UniChat's relay; without
+   it, emotes show as their names. Unrecognised event and card types are listed in Settings → Diagnostics. */
 (function () {
   'use strict';
   const { hub, ConnectorError, registerConnector, runSocketIo } = window.UniChatHub;
+  const Store = window.UniChatStore;
 
   const SOCKET = 'wss://api.velora.tv';
 
@@ -14,6 +15,80 @@
   const num = v => { const n = Number(v); return v !== null && v !== '' && Number.isFinite(n) ? n : undefined; };
   /** Pictures only from Velora's own servers. */
   const veloraUrl = u => (typeof u === 'string' && /^https:\/\/(?:[a-z0-9-]+\.)*velora\.tv\/[\w./%-]+$/i.test(u) ? u : '');
+
+  // ---------- Emotes ----------
+  // A Velora emote is a plain word in the message (e.g. "VeloraFlameLaugh"); whoever shows the chat turns it into a
+  // picture. Velora's own site matches whole words, any capitals, ignoring punctuation (and :colons:) around them, and
+  // so does this. The list (every Velora emote, global and every channel's) comes trimmed from the relay, which
+  // fetches it from Velora at most once an hour. Picture addresses are built here, on Velora's image server only.
+  const EMOTE_REFRESH_MS = 3600000, EMOTE_RETRY_MS = 600000, MAX_EMOTES = 20000;
+  const EMOTE_CODE = /^[A-Za-z0-9_]{1,60}$/;
+  const FOLDER = /^[a-z0-9_-]{1,160}$/i;
+  const EDGES = /^([:.,!?;()[\]{}"'`]*)(.*?)([:.,!?;()[\]{}"'`]*)$/;
+  let emotes = new Map();      // code in lowercase → picture address
+  let emotesDueAt = 0;         // when to (re)load the list
+  let emotesLoading = false;
+  let emoteProblemNoted = false;
+
+  /** The relay's answer → Map. Anything not shaped like a Velora emote is skipped. */
+  function readEmotes(j) {
+    const out = new Map();
+    const sets = obj(obj(j).sets);
+    for (const set of Object.keys(sets)) {
+      if (!FOLDER.test(set) || !Array.isArray(sets[set])) continue;
+      for (const item of sets[set]) {
+        if (out.size >= MAX_EMOTES) return out;
+        if (!Array.isArray(item)) continue;
+        const code = str(item[0]), short = str(item[1]);
+        const folder = short.startsWith('-') ? code.toLowerCase() + short : short; // "-<id>" stands for "<code>-<id>"
+        if (!EMOTE_CODE.test(code) || !FOLDER.test(folder) || out.has(code.toLowerCase())) continue;
+        out.set(code.toLowerCase(), `https://assets.velora.tv/emotes/${set}/${folder}/56.webp`);
+      }
+    }
+    return out;
+  }
+
+  async function loadEmotes() {
+    if (emotesLoading || Date.now() < emotesDueAt || !Store || !Store.RELAY_URL) return;
+    emotesLoading = true;
+    emotesDueAt = Date.now() + EMOTE_RETRY_MS;
+    const ac = new AbortController();
+    const giveUp = setTimeout(() => ac.abort(), 20000);
+    try {
+      const res = await fetch(Store.relayAddress('/velora/emotes').replace(/^wss:/i, 'https:'), { credentials: 'omit', signal: ac.signal });
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      const next = readEmotes(await res.json());
+      if (!next.size) throw new Error('the list was empty');
+      emotes = next;
+      emotesDueAt = Date.now() + EMOTE_REFRESH_MS;
+    } catch (err) {
+      if (!emoteProblemNoted) {
+        emoteProblemNoted = true;
+        hub.diagnostic(`Velora: couldn't load the emote list from the relay (${err.name === 'AbortError' ? 'timed out' : err.message}); emotes show as words until it loads`);
+      }
+    } finally {
+      clearTimeout(giveUp);
+      emotesLoading = false;
+    }
+  }
+
+  /** A chat message → text and emote parts. */
+  function withEmotes(text) {
+    if (!emotes.size || !text) return [{ t: 'text', v: text }];
+    const parts = [];
+    let buf = '';
+    for (const word of text.split(/(\s+)/)) {
+      const m = word ? EDGES.exec(word) : null;
+      const url = m && m[2] ? emotes.get(m[2].toLowerCase()) : undefined;
+      if (!url) { buf += word; continue; }
+      buf += m[1].replace(/:/g, '');
+      if (buf) parts.push({ t: 'text', v: buf });
+      parts.push({ t: 'emote', v: m[2], url, typed: true }); // typed: filters, highlights and the voice still see the word
+      buf = m[3].replace(/:/g, '');
+    }
+    if (buf || !parts.length) parts.push({ t: 'text', v: buf });
+    return parts;
+  }
 
   // ---------- Messages ----------
   // Chat messages are flat ({ username, displayName, avatarUrl, message, … }); the docs also describe a
@@ -102,9 +177,10 @@
         return;
       }
 
+      if (Date.now() >= emotesDueAt) loadEmotes(); // hourly refresh (or a retry), for lines after this one
       const r = obj(d.replyTo);
       hub.publish({
-        id, platform: 'velora', kind: 'chat', ts, user: buildUser(d, channel), parts: [{ t: 'text', v: text }],
+        id, platform: 'velora', kind: 'chat', ts, user: buildUser(d, channel), parts: withEmotes(text),
         reply: d.replyTo ? { id: r.messageId ? 'velora:' + str(r.messageId) : null, name: str(r.displayName) || str(r.username), text: str(r.snippet || r.message) } : null,
       });
     }
@@ -156,6 +232,7 @@
     run(s, ctx, signal) {
       const channel = s.velora.channel;
       const handle = makeHandler(channel, ctx);
+      loadEmotes(); // alongside joining the channel, so it's usually ready before the first message
       let fail = null;
       return runSocketIo(SOCKET, '/chat', signal, {
         connected(io) {
@@ -169,5 +246,5 @@
     },
   });
 
-  window.UniChatVelora = { makeHandler }; // exposed for testing
+  window.UniChatVelora = { makeHandler, readEmotes, withEmotes, loadEmotes: () => { emotesDueAt = 0; return loadEmotes(); }, emoteCount: () => emotes.size }; // exposed for testing
 })();
