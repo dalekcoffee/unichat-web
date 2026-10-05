@@ -513,64 +513,75 @@
   });
 
   // ---------- Resonite: this device sends its chat to the in-game panel (the chat page does it, see resonite.js) ----------
-  // Saved straight away and kept apart from the settings (Store.resonite), so the key never goes into links or backups.
+  // Saved straight away and kept apart from the settings (Store.resonite), so the room code never goes into links or backups.
   let resReport = null; // the latest word from a chat page in this browser
   const RES_TEXT = {
     connecting: () => 'Connecting to the relay…',
     sending: r => `Sending to Resonite · ${r.readers ? `${r.readers} panel${r.readers === 1 ? '' : 's'} reading` : 'no panel connected yet'}`,
     retrying: r => `Can't reach the relay (${r.reason || 'no answer'}). Trying again by itself…`,
-    badkey: () => 'The relay refused this send key. Check that it was pasted in full (and that it is the current one).',
+    badroom: () => "The relay didn't accept this room code. Press New room, then paste the new panel code into your panel.",
+    inuse: () => "Someone else's UniChat is sending to this room right now. Press New room to get a room of your own.",
     replaced: () => 'Another device (or chat tab) took over sending. Turn this off and on again here to take it back.',
     refused: r => `The relay refused: ${r.reason || 'not set up for Resonite yet'}.`,
-    nokey: () => 'Paste your send key to start.',
+    noroom: () => 'Type your room code, or press New room.',
     off: () => 'Not sending from this device.',
   };
   function showResState() {
-    const on = $('#resOn').checked, key = $('#resKey').value.trim();
     let text;
-    if (!on) text = RES_TEXT.off();
-    else if (key.length < 16) text = RES_TEXT.nokey();
-    else if (!resReport || resReport.state === 'off' || resReport.state === 'nokey') text = 'Open the chat page on this device to start sending.';
+    if (!$('#resOn').checked) text = RES_TEXT.off();
+    else if (!Store.resonite.isRoom($('#resRoom').value)) text = RES_TEXT.noroom();
+    else if (!resReport || resReport.state === 'off' || resReport.state === 'noroom') text = 'Open the chat page on this device to start sending.';
     else text = (Object.prototype.hasOwnProperty.call(RES_TEXT, resReport.state) ? RES_TEXT[resReport.state] : RES_TEXT.connecting)(resReport);
     $('#resState').textContent = text;
   }
-  async function showReadAddress() {
-    const key = $('#resKey').value.trim();
-    const box = $('#resReadBox');
-    if (key.length < 16 || !(window.crypto && crypto.subtle)) { box.classList.add('hidden'); return; }
-    const read = await Store.resonite.readKey(key);
-    if ($('#resKey').value.trim() !== key) return; // typed on meanwhile
-    $('#resRead').value = Store.relayAddress(`/room/${Store.RESONITE_ROOM}/read?key=${read}&lines=15`);
-    box.classList.remove('hidden');
+  async function showPanelCode() {
+    const room = Store.resonite.cleanRoom($('#resRoom').value);
+    if (!Store.resonite.isRoom(room) || !(window.crypto && crypto.subtle)) { $('#resPanel').value = ''; return; }
+    const code = await Store.resonite.panelCode(room);
+    if (Store.resonite.cleanRoom($('#resRoom').value) === room) $('#resPanel').value = code; // not typed on meanwhile
   }
   function saveResonite() {
-    try { Store.resonite.save({ on: $('#resOn').checked, key: $('#resKey').value }); }
+    const room = Store.resonite.cleanRoom($('#resRoom').value);
+    if (!Store.resonite.isRoom(room)) { toast('A room code is 8 letters and digits (no 0, O, 1, I or L).', true); showResState(); return; }
+    $('#resRoom').value = room;
+    try { Store.resonite.save({ on: $('#resOn').checked, room }); }
     catch (err) { toast(err.message, true); return; }
     resReport = null;
     showResState();
-    showReadAddress();
+    showPanelCode();
   }
   if (Store.RELAY_URL) {
-    const res = Store.resonite.load();
+    let res = Store.resonite.load();
+    if (!res.room && window.crypto && crypto.getRandomValues) { // the first visit (or the old send-key setup): make this browser's room
+      res = { on: res.on, room: Store.resonite.newRoom() };
+      try { Store.resonite.save(res); } catch { /* shown when they try to turn it on */ }
+    }
     $('#resOn').checked = res.on;
-    $('#resKey').value = res.key;
+    $('#resRoom').value = res.room;
     $('#resOn').addEventListener('change', saveResonite);
-    $('#resKey').addEventListener('change', saveResonite);
-    $('#resKey').addEventListener('input', () => { showResState(); showReadAddress(); });
-    $('#resKeyShow').addEventListener('click', () => {
-      const input = $('#resKey');
+    $('#resRoom').addEventListener('change', saveResonite);
+    $('#resRoom').addEventListener('input', () => { showResState(); showPanelCode(); });
+    $('#resRoomShow').addEventListener('click', () => {
+      const input = $('#resRoom');
       input.type = input.type === 'password' ? 'text' : 'password';
-      $('#resKeyShow').textContent = input.type === 'password' ? 'Show' : 'Hide';
-      $('#resKeyShow').setAttribute('aria-pressed', String(input.type === 'text'));
+      $('#resRoomShow').textContent = input.type === 'password' ? 'Show' : 'Hide';
+      $('#resRoomShow').setAttribute('aria-pressed', String(input.type === 'text'));
+    });
+    $('#resNewRoom').addEventListener('click', () => {
+      if (!confirm('Make a new room? Your panels in Resonite will need the new panel code.')) return;
+      $('#resRoom').value = Store.resonite.newRoom();
+      saveResonite();
+      toast('New room made. Copy the new panel code into your panel.');
     });
     $('#resCopy').addEventListener('click', () => {
-      const input = $('#resRead');
-      const done = () => toast('Copied. Paste it into the Address field of your UniChat panel in Resonite.');
+      const input = $('#resPanel');
+      if (!input.value) return;
+      const done = () => toast("Copied. Paste it into the key field on your panel's Configuration page in Resonite.");
       if (navigator.clipboard && window.isSecureContext) navigator.clipboard.writeText(input.value).then(done, () => { input.select(); document.execCommand('copy'); done(); });
       else { input.select(); document.execCommand('copy'); done(); }
     });
     showResState();
-    showReadAddress();
+    showPanelCode();
   }
 
   // ---------- TikTok: Euler connections opened today (written by the chat page, see tiktok.js) ----------

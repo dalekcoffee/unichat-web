@@ -2,8 +2,10 @@
    relay (address built in, see store.js), which passes them to your in-game panel. Only what this page shows is sent:
    chat the filters hide here isn't, an alert from a hidden viewer goes without its message, and quiet notes (joins,
    likes, shares) stay here. Missed and caught-up lines go without a sound. A new alert goes when this page plays it, so
-   when it waits for its voice line the panel's banner and sound wait too. One device sends at a time: the relay hands
-   over to the newest one, and the older one stops until it's turned on again. */
+   when it waits for its voice line the panel's banner and sound wait too. It sends to this browser's room (Settings →
+   Resonite: the room code, kept here; panels read the panel code worked out from it). One device sends to a room at a
+   time: the same channels on another device take over (this one stops until it's turned on again), and while this
+   page sends, someone else's page is told the room is in use. */
 (function () {
   'use strict';
   const U = window.UniChat;
@@ -21,7 +23,8 @@
   let history = [];  // what this page shows, newest last (from the hub)
   let statuses = [];
   let ws = null, authed = false, attempt = 0, retryTimer = null, lastHeard = 0;
-  let halted = '';   // 'badkey' | 'replaced' | 'refused': wait until Settings → Resonite changes
+  let halted = '';   // 'badroom' | 'inuse' | 'replaced' | 'refused': wait until Settings → Resonite changes
+  let connectRun = 0; // a newer connect() makes an older one (still working out the panel code) give up
   let report = { state: 'off' };
   let sentTones = ''; // the status last sent (statuses change often without changing the dots)
   const held = new Map(); // id → { m, timer }: new alerts waiting until the chat page plays them
@@ -107,19 +110,26 @@
     if (old) { try { old.close(1000, 'Turned off'); } catch { /* already closed */ } }
   }
 
-  function connect() {
+  async function connect() {
     disconnect();
+    const run = ++connectRun;
     const cfg = Store.resonite.load();
     if (!cfg.on) { tell({ state: 'off' }); return; }
-    if (cfg.key.length < 16) { tell({ state: 'nokey' }); return; }
+    if (!cfg.room) { tell({ state: 'noroom' }); return; }
     if (halted) { tell(report.state === halted ? report : { state: halted }); return; }
     tell({ state: 'connecting' });
+    let code;
+    try { code = await Store.resonite.panelCode(cfg.room); }
+    catch { tell({ state: 'refused', reason: "this browser can't work out the panel code" }); return; }
+    if (run !== connectRun) return;
     let sock;
-    try { sock = new WebSocket(Store.relayAddress(`/room/${encodeURIComponent(Store.RESONITE_ROOM)}/send`)); }
+    try { sock = new WebSocket(Store.relayAddress(`/panel/${code}/send`)); }
     catch (err) { retry(err.message); return; }
     ws = sock;
     lastHeard = Date.now();
-    sock.onopen = () => { try { sock.send(JSON.stringify({ auth: cfg.key })); } catch { /* onclose follows */ } };
+    sock.onopen = () => {
+      try { sock.send(JSON.stringify({ room: cfg.room, channels: Store.resonite.channels(settings) })); } catch { /* onclose follows */ }
+    };
     sock.onmessage = ev => {
       if (ws !== sock) return;
       lastHeard = Date.now();
@@ -142,7 +152,8 @@
       authed = false;
       const why = String(ev.reason || '').slice(0, 200);
       window.UniChatHub.hub.diagnostic(`Resonite: relay connection closed (code ${ev.code}${why ? ', ' + why : ''})`);
-      if (ev.code === 4401) { halted = 'badkey'; tell({ state: 'badkey' }); }
+      if (ev.code === 4401) { halted = 'badroom'; tell({ state: 'badroom' }); }
+      else if (ev.code === 4423) { halted = 'inuse'; tell({ state: 'inuse' }); }
       else if (ev.code === 4409) { halted = 'replaced'; tell({ state: 'replaced' }); }
       else if (ev.code === 4403 || ev.code === 4404) { halted = 'refused'; tell({ state: 'refused', reason: why }); }
       else retry(ev.code === 1006 ? "can't reach the relay" : why || `closed (${ev.code})`);

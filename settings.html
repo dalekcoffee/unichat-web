@@ -419,22 +419,23 @@ system=1     show connection messages</span>
       <label class="check"><input type="checkbox" id="resOn"> Send this device's chat and alerts to my Resonite panel</label>
       <div class="grid">
         <div class="field">
-          <label for="resKey">Send key</label>
+          <label for="resPanel">Panel code (for your panel in Resonite)</label>
           <div class="input-group">
-            <input type="password" id="resKey" autocomplete="off" spellcheck="false" placeholder="paste your send key">
-            <button class="btn" type="button" id="resKeyShow" aria-controls="resKey">Show</button>
+            <input type="text" id="resPanel" readonly spellcheck="false">
+            <button class="btn" type="button" id="resCopy">Copy</button>
+          </div>
+        </div>
+        <div class="field">
+          <label for="resRoom">Room code (private: it lets a device send to your panel)</label>
+          <div class="input-group">
+            <input type="password" id="resRoom" autocomplete="off" spellcheck="false" maxlength="12">
+            <button class="btn" type="button" id="resRoomShow" aria-controls="resRoom">Show</button>
+            <button class="btn" type="button" id="resNewRoom">New room</button>
           </div>
         </div>
       </div>
       <p class="help keep" id="resState"></p>
-      <div class="field hidden" id="resReadBox">
-        <label for="resRead">Your panel's address (paste into the Address field of your UniChat panel in Resonite)</label>
-        <div class="input-group">
-          <input type="text" id="resRead" readonly spellcheck="false">
-          <button class="btn" type="button" id="resCopy">Copy</button>
-        </div>
-      </div>
-      <p class="help">Only one device sends at a time, while its chat page is open; turning this on somewhere else takes over. Saved straight away, in this browser only: the key never goes into links or backups. The panel's address can only read your chat, which is public anyway. The voice keeps playing on this device.</p>
+      <p class="help">This browser made your room code and keeps it, never in links or backups. To send from another device, type the same room code there. One device sends at a time, while its chat page is open. The panel code can only read your chat, which is public anyway. New room gives you new codes, so your panels need the new panel code. The voice keeps playing on this device.</p>
     </section>
 
     <section class="card" id="sec-backup" data-nav="Backup" data-ico="backup">

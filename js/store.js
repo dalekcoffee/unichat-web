@@ -83,32 +83,66 @@
   // yet. It must also be listed in connect-src in index.html and overlay.html.
   const RELAY_URL = 'wss://unirelay.dalek.coffee';
   const RELAY_TIKTOK_USER = 'dalekcoffee'; // the only TikTok username the relay serves; anyone else uses their own Euler key
-  const RESONITE_ROOM = 'dalek';
   const relayAddress = path => RELAY_URL.replace(/\/+$/, '') + path;
   /** True when the relay can serve this TikTok username (no Euler key needed). */
   const relayServes = username => !!RELAY_URL && normalizeTikTok(username).toLowerCase() === RELAY_TIKTOK_USER; // TikTok names ignore case
   /** True when these settings read TikTok through the relay: its username, unless "Use my own Euler key" is on. */
   const usesRelay = s => relayServes(s.tikTok.username || DEFAULTS.tikTok.username) && s.tikTok.ownKey !== true;
 
-  // Resonite (Settings → Resonite): whether THIS device sends its chat to the relay, and the send key. Kept apart from the
-  // settings, so it never ends up in links, settings files or backups, and the other devices don't send too.
+  // Resonite (Settings → Resonite): whether THIS device sends its chat to the relay, and the room it sends to. Kept apart
+  // from the settings, so the room code never ends up in links, settings files or backups, and the other devices don't
+  // send too. Room code: 8 characters picked at random in this browser (whoever has it may send to the room). Panel code:
+  // 12 characters worked out from it, the one pasted into Resonite (it can only read). The relay works the panel code
+  // out the same way (known answer: room K7MQ2ZPA → panel E8S966A5FHPR).
+  const CODE_CHARS = 'ABCDEFGHJKMNPQRSTUVWXYZ23456789'; // no 0/O or 1/I/L, so a code can be typed on another device
+  const ROOM_CODE = /^[ABCDEFGHJKMNPQRSTUVWXYZ2-9]{8}$/;
   const RESONITE_KEY = 'unichat.web.resonite';
+  const cleanRoom = v => (typeof v === 'string' ? v.replace(/[\s-]+/g, '').toUpperCase().slice(0, 40) : '');
   const resonite = {
     load() {
       let v = null;
       try { v = JSON.parse(localStorage.getItem(RESONITE_KEY) || 'null'); } catch { /* blocked or damaged */ }
       v = isObj(v) ? v : {};
-      return { on: v.on === true, key: typeof v.key === 'string' ? v.key.trim().slice(0, 200) : '' };
+      const room = cleanRoom(v.room);
+      return { on: v.on === true, room: ROOM_CODE.test(room) ? room : '' };
     },
     save(v) {
-      try { localStorage.setItem(RESONITE_KEY, JSON.stringify({ on: v.on === true, key: String(v.key || '').trim().slice(0, 200) })); }
+      const room = cleanRoom(v.room);
+      try { localStorage.setItem(RESONITE_KEY, JSON.stringify({ on: v.on === true, room: ROOM_CODE.test(room) ? room : '' })); }
       catch { throw new Error('This browser blocked saving (private mode?)'); }
     },
     STORAGE_KEY: RESONITE_KEY,
-    /** The panel's read key: the start of SHA-256("unichat-resonite-read:" + send key), base64url (the relay does the same). */
-    async readKey(sendKey) {
-      const hash = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(`unichat-resonite-read:${sendKey}`));
-      return btoa(String.fromCharCode(...new Uint8Array(hash))).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '').slice(0, 32);
+    cleanRoom,
+    isRoom: v => ROOM_CODE.test(cleanRoom(v)),
+    /** A new room code: 8 characters from CODE_CHARS, evenly random (bytes ≥ 248 are skipped, 248 = 8 × 31). */
+    newRoom() {
+      const out = [];
+      const buf = new Uint8Array(16);
+      while (out.length < 8) {
+        crypto.getRandomValues(buf);
+        for (const b of buf) if (b < 248 && out.length < 8) out.push(CODE_CHARS[b % CODE_CHARS.length]);
+      }
+      return out.join('');
+    },
+    /** The panel code for a room code: the first 12 bytes of SHA-256("unichat-panel:" + room), each modulo 31 into CODE_CHARS. */
+    async panelCode(room) {
+      const h = new Uint8Array(await crypto.subtle.digest('SHA-256', new TextEncoder().encode(`unichat-panel:${cleanRoom(room)}`)));
+      let out = '';
+      for (let i = 0; i < 12; i++) out += CODE_CHARS[h[i] % CODE_CHARS.length];
+      return out;
+    },
+    /** The channels these settings read, as "platform:name". The relay keeps them only to tell a room's own streamer
+     *  (same channels, another device) from someone else's page; it never sends them to anyone. */
+    channels(s) {
+      const out = [];
+      const add = (p, on, name) => { if (on && name) out.push(`${p}:${String(name).toLowerCase()}`); };
+      add('twitch', s.twitch.enabled, normalizeTwitch(s.twitch.channel || DEFAULTS.twitch.channel));
+      add('tiktok', s.tikTok.enabled, normalizeTikTok(s.tikTok.username || DEFAULTS.tikTok.username));
+      add('kick', s.kick.enabled, normalizeKick(s.kick.channel || DEFAULTS.kick.channel));
+      add('velora', s.velora.enabled, normalizeVelora(s.velora.channel || DEFAULTS.velora.channel));
+      add('blaze', s.blaze.enabled, normalizeBlaze(s.blaze.channel || DEFAULTS.blaze.channel));
+      add('nimo', s.nimo.enabled, normalizeNimo(s.nimo.channel || DEFAULTS.nimo.channel));
+      return out;
     },
   };
 
@@ -405,5 +439,5 @@
     return save(merge(loadSaved(), migrate(parsed)));
   }
 
-  window.UniChatStore = { KEY, DEFAULTS, RELAY_URL, RELAY_TIKTOK_USER, RESONITE_ROOM, relayAddress, relayServes, usesRelay, resonite, load, loadSaved, save, exportJson, importJson, normalizeTwitch, normalizeTikTok, normalizeKick, normalizeVelora, normalizeBlaze, normalizeNimo, shareUrl, hasUrlConfig };
+  window.UniChatStore = { KEY, DEFAULTS, RELAY_URL, RELAY_TIKTOK_USER, relayAddress, relayServes, usesRelay, resonite, load, loadSaved, save, exportJson, importJson, normalizeTwitch, normalizeTikTok, normalizeKick, normalizeVelora, normalizeBlaze, normalizeNimo, shareUrl, hasUrlConfig };
 })();
