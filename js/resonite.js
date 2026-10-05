@@ -47,15 +47,16 @@
   function pack(e) {
     if (!e || !PLATFORMS.includes(e.platform)) return null;
     const alert = ALERT_KINDS.includes(e.kind);
-    if (!alert && (e.kind !== 'chat' || e.silent === true)) return null;
+    const join = e.kind === 'chat' && e.code === 'join'; // TikTok joins: a quiet "joined" line on the panel too
+    if (!alert && !join && (e.kind !== 'chat' || e.silent === true)) return null;
     const cls = U.classify(e, settings);
     if (cls.hidden) return null;
     const u = e.user || {};
     const name = cls.maskName ? 'Someone' : String(u.name || u.login || '');
     return {
-      id: e.id, k: e.kind, p: e.platform, n: name,
+      id: e.id, k: join ? 'join' : e.kind, p: e.platform, n: name,
       c: name ? hexColor(U.userColor(u, 'dark')) : null,
-      x: (U.shownParts(e, cls) || []).map(p => (p && p.v != null ? String(p.v) : '')).join('').trim(),
+      x: join ? '' : (U.shownParts(e, cls) || []).map(p => (p && p.v != null ? String(p.v) : '')).join('').trim(),
       ti: alert ? String(e.title || '') : '',
       a: alert ? String(e.amount || '') : '',
       q: e.missed === true || e.historical === true,
@@ -71,7 +72,7 @@
     const chat = [], alerts = [];
     for (const e of history) {
       const m = held.has(e.id) ? null : pack(e); // a held alert goes later, with its sound
-      if (m) (m.k === 'chat' ? chat : alerts).push(Object.assign(m, { q: true }));
+      if (m) (m.k === 'chat' || m.k === 'join' ? chat : alerts).push(Object.assign(m, { q: true }));
     }
     const status = tones();
     sentTones = JSON.stringify(status);
@@ -204,7 +205,7 @@
           if (history.length > 300) history.shift();
           const m = pack(msg.event);
           if (!m) break;
-          if (m.k !== 'chat' && !m.q && !played.includes(m.id)) held.set(m.id, { m, timer: setTimeout(() => release(m.id), HOLD_MS) });
+          if (ALERT_KINDS.includes(m.k) && !m.q && !played.includes(m.id)) held.set(m.id, { m, timer: setTimeout(() => release(m.id), HOLD_MS) });
           else send({ t: 'ev', e: m });
           break;
         }
