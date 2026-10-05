@@ -94,11 +94,11 @@
 
   // Resonite (Settings → Resonite): whether THIS device sends its chat to the relay, and the room it sends to. Kept apart
   // from the settings, so the room code never ends up in links, settings files or backups, and the other devices don't
-  // send too. Room code: 8 characters picked at random in this browser (whoever has it may send to the room). Panel code:
+  // send too. Room code: 16 characters picked at random in this browser (whoever has it may send to the room). Panel code:
   // 12 characters worked out from it, the one pasted into Resonite (it can only read). The relay works the panel code
-  // out the same way (known answer: room K7MQ2ZPA → panel E8S966A5FHPR).
+  // out the same way (known answer: room K7MQ2ZPAXW4N8HRT → panel 8GCPKB5W995H).
   const CODE_CHARS = 'ABCDEFGHJKMNPQRSTUVWXYZ23456789'; // no 0/O or 1/I/L, so a code can be typed on another device
-  const ROOM_CODE = /^[ABCDEFGHJKMNPQRSTUVWXYZ2-9]{8}$/;
+  const ROOM_CODE = /^[ABCDEFGHJKMNPQRSTUVWXYZ2-9]{16}$/;
   const RESONITE_KEY = 'unichat.web.resonite';
   const cleanRoom = v => (typeof v === 'string' ? v.replace(/[\s-]+/g, '').toUpperCase().slice(0, 40) : '');
   const resonite = {
@@ -117,13 +117,14 @@
     STORAGE_KEY: RESONITE_KEY,
     cleanRoom,
     isRoom: v => ROOM_CODE.test(cleanRoom(v)),
-    /** A new room code: 8 characters from CODE_CHARS, evenly random (bytes ≥ 248 are skipped, 248 = 8 × 31). */
+    /** A new room code: 16 characters from CODE_CHARS, evenly random (bytes ≥ 248 are skipped, 248 = 8 × 31). An older
+     *  8-character room no longer counts (it could be worked out from its panel code), so Settings makes a new one. */
     newRoom() {
       const out = [];
-      const buf = new Uint8Array(16);
-      while (out.length < 8) {
+      const buf = new Uint8Array(32);
+      while (out.length < 16) {
         crypto.getRandomValues(buf);
-        for (const b of buf) if (b < 248 && out.length < 8) out.push(CODE_CHARS[b % CODE_CHARS.length]);
+        for (const b of buf) if (b < 248 && out.length < 16) out.push(CODE_CHARS[b % CODE_CHARS.length]);
       }
       return out.join('');
     },
@@ -428,7 +429,12 @@
 
   /** Settings in effect on this page: defaults ← saved ← URL parameters. */
   function load() {
-    return normalize(merge(merge(DEFAULTS, readSaved()), urlOverrides()));
+    const saved = merge(DEFAULTS, readSaved());
+    const s = merge(saved, urlOverrides());
+    // Hidden users add up: the list a link carries never un-hides someone hidden in this browser, so "Hide this user"
+    // and the Resonite panel's hide also work on pages opened from a link.
+    s.filters.blockedUsers = saved.filters.blockedUsers.concat(s.filters.blockedUsers);
+    return normalize(s);
   }
 
   /** Saved settings only (for the settings page; URL overrides not baked in). */

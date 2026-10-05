@@ -104,7 +104,7 @@
         };
 
         /**
-         * The relay's notes. searching: looking for the live broadcast or connecting to its chat (nothing to show yet).
+         * The relay's notes. searching: looking for the live broadcast or connecting to its chat (a yellow dot meanwhile).
          * live: reading its chat (title = the broadcast's). offline: not live; the relay looks again by itself, so this
          * stays connected, like TikTok when you're not live. notfound (no such account) and error (X turned the relay
          * away): shown like any other failed try, and this page comes back when the relay tries again (retryAt).
@@ -112,7 +112,9 @@
         function relayState(r) {
           const reason = clean(r.reason, 200);
           switch (r.state) {
-            case 'searching': break;
+            case 'searching': // the link to the relay works; the dot stays yellow until the broadcast is found
+              ctx.connecting(t.user ? `Looking for @${t.user}'s live broadcast…` : "Opening that broadcast's chat…");
+              break;
             case 'live': {
               const title = clean(r.title, 100);
               ctx.setLive(true);
@@ -121,7 +123,11 @@
             }
             case 'offline':
               ctx.setLive(false);
-              ctx.waiting(`${t.user ? `@${t.user}` : 'The broadcast'} isn't live right now (the relay keeps checking)`);
+              // The relay finds a live stream only through a recent post linking to it (x.com/i/broadcasts/…).
+              // The relay's note says what it saw ("@name isn't live on X right now (read 20 recent posts; no broadcast links in them)").
+              ctx.waiting(t.user
+                ? `${reason || `@${t.user} isn't live on X right now`}. Live already? Paste your broadcast link in Settings → X. The relay keeps checking.`
+                : `${reason || "The broadcast isn't live right now"} (the relay keeps checking)`);
               break;
             case 'notfound':
               finish(new ConnectorError(reason || (t.user ? `X has no account called @${t.user}` : "X can't find that broadcast"),

@@ -914,8 +914,10 @@
       ? (data.firstSeenDuringLearning ? `Chatting since at least ${formatDate(data.firstSeen)}` : `First seen ${formatDate(data.firstSeen)}`)
       : 'Not seen chatting yet';
     const chips = supportChips(s && s.totals);
-    const recent = s && s.recent && s.recent.length
-      ? s.recent.slice().reverse().map(r => `<div class="r"><span class="ts">${U.fmtTime(r.ts)}</span>${U.esc(r.text)}</div>`).join('')
+    // Only what the chat shows: messages the filters hide (blocked words, slurs, hidden users) stay out, as in Resonite.
+    const shown = (s && Array.isArray(s.recent) ? s.recent : []).filter(r => r && !U.classify({ kind: 'chat', platform, user, parts: [{ t: 'text', v: String(r.text || '') }] }, settings).hidden);
+    const recent = shown.length
+      ? shown.reverse().map(r => `<div class="r"><span class="ts">${U.fmtTime(r.ts)}</span>${U.esc(r.text)}</div>`).join('')
       : '<div class="help">No messages this stream.</div>';
     const profile = U.profileUrl(platform, { login: user.login || login });
     const site = U.NAMES[platform] || platform;
@@ -1134,11 +1136,48 @@
       <div class="tip-hint">${how} to ${off ? 'show' : 'hide'} ${U.esc(s.label)} messages</div>`;
   }
 
+  // The Resonite pill, last in the row while Settings → Resonite sends from this device: how this page's sending goes
+  // (resonite.js reports it). The page is on stream, so the card never shows the room or panel code: resonite.js never
+  // reports them, and a code-like word in the relay's own reason is blanked too.
+  const RES_ID = 'resonite';
+  const VR_ICON = '<svg viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M4 6h16a3 3 0 0 1 3 3v6a3 3 0 0 1-3 3h-4.2l-2.3-2.7a2 2 0 0 0-3 0L8.2 18H4a3 3 0 0 1-3-3V9a3 3 0 0 1 3-3Z"/></svg>';
+  let resonite = null; // resonite.js's latest report ({ state, readers, reason, retryAt }), null while sending is off
+  window.addEventListener('unichat:resonite', ev => {
+    const r = ev.detail || {};
+    resonite = r.state && r.state !== 'off' ? r : null;
+    renderPills();
+  });
+  const noCodes = s => String(s || '').replace(/\b[A-Z0-9]{8,}\b/g, '…').slice(0, 200);
+  /** { tone, text, detail } of the Resonite pill. */
+  function resTone(r) {
+    const n = Math.min(99, Math.max(0, Math.floor(Number(r.readers)) || 0));
+    const why = noCodes(r.reason);
+    switch (r.state) {
+      case 'sending': return { tone: 'sending', text: 'Sending', detail: n ? `Sending to ${n} panel${n === 1 ? '' : 's'}` : 'Sending · no panel connected yet' };
+      case 'connecting': return { tone: 'trying', text: 'Connecting…', detail: 'Connecting to the relay…' };
+      case 'retrying': return { tone: 'trying', text: 'Reconnecting…', detail: `${why ? why[0].toUpperCase() + why.slice(1) : "Can't reach the relay"}. Trying again by itself.` };
+      case 'inuse': return { tone: 'problem', text: 'Room in use', detail: 'Another UniChat page is sending to this room (another device, or other channels).' };
+      case 'replaced': return { tone: 'problem', text: 'Stopped sending', detail: 'Another device or chat tab took over sending to this room.' };
+      case 'badroom': return { tone: 'problem', text: 'Wrong room code', detail: "The relay didn't accept this device's room code." };
+      case 'noroom': return { tone: 'problem', text: 'No room code', detail: 'Sending is on, but this device has no room code yet.' };
+      default: return { tone: 'problem', text: 'Refused', detail: `The relay refused${why ? `: ${why}` : ''}.` };
+    }
+  }
+  function resTipHtml(r) {
+    const t = resTone(r);
+    return `<div class="tip-head">${VR_ICON}<b>Resonite</b></div>
+      <div class="tip-state t-${t.tone}"><span class="dot"></span>${U.esc(t.text)}</div>
+      <div class="tip-line">${U.esc(t.detail)}</div>
+      ${r.state === 'retrying' && r.retryAt ? `<div class="tip-line muted">${U.esc(countdown(r.retryAt))}</div>` : ''}
+      <div class="tip-hint">${t.tone === 'problem' ? 'Open Settings → Resonite' : 'This page sends its chat to your panel in Resonite'}</div>`;
+  }
+
   function showTip(pill) {
-    const s = statusById(pill.dataset.id);
+    const res = pill.dataset.id === RES_ID;
+    const s = res ? resonite : statusById(pill.dataset.id);
     if (!s) { hideTip(); return; }
-    tipFor = s.id;
-    pillTip.innerHTML = tipHtml(s);
+    tipFor = pill.dataset.id;
+    pillTip.innerHTML = res ? resTipHtml(s) : tipHtml(s);
     pillTip.classList.remove('hidden');
     // Lined up with the pill's left edge, which stays put while the pill widens to show its name.
     const r = pill.getBoundingClientRect();
@@ -1161,12 +1200,12 @@
     renderPills();
   }
 
-  function makePill(s) {
+  function makePill(s, icon = U.icon(s.platform)) {
     const pill = document.createElement('button');
     pill.type = 'button';
     pill.dataset.id = s.id;
     pill.dataset.platform = s.platform;
-    pill.innerHTML = `${U.icon(s.platform)}<span class="pname">${U.esc(s.label)}</span><span class="pcount" hidden></span><span class="dot"></span>`;
+    pill.innerHTML = `${icon}<span class="pname">${U.esc(s.label)}</span><span class="pcount" hidden></span><span class="dot"></span>`;
     pill.addEventListener('pointerdown', e => { lastPointer = e.pointerType || 'mouse'; });
     pill.addEventListener('keydown', () => { lastPointer = 'keyboard'; });
     pill.addEventListener('pointerenter', e => { if (e.pointerType !== 'touch') showTip(pill); });
@@ -1175,9 +1214,23 @@
     pill.addEventListener('blur', () => { if (tipFor === pill.dataset.id) hideTip(); });
     pill.addEventListener('click', () => {
       if (lastPointer === 'touch' && tipFor !== pill.dataset.id) { showTip(pill); return; } // first tap: details
+      if (pill.dataset.id === RES_ID) { if (lastPointer === 'touch') hideTip(); else showTip(pill); return; } // no messages to hide
       toggleHidden(pill.dataset.platform);
     });
     return pill;
+  }
+
+  /** The Resonite pill (see RES_ID), last in the row. */
+  function renderResPill() {
+    let pill = pillFor(RES_ID);
+    pillsEl.classList.toggle('with-res', !!resonite); // phones: a little tighter, so all the pills still fit (style.css)
+    if (!resonite) { if (pill) pill.remove(); return; }
+    if (!pill) pill = makePill({ id: RES_ID, platform: '', label: 'Resonite' }, VR_ICON);
+    const t = resTone(resonite);
+    pill.className = `pill t-${t.tone}`;
+    pill.setAttribute('aria-label', `Resonite: ${t.text}`);
+    pill.setAttribute('aria-describedby', 'pillTip');
+    if (pillsEl.lastElementChild !== pill) pillsEl.appendChild(pill);
   }
 
   function renderPills() {
@@ -1185,11 +1238,12 @@
     if (!visible.length) {
       pillsEl.innerHTML = '<span class="pill pills-none"><span class="dot"></span>No platforms set up yet</span>';
       hideTip();
+      renderResPill();
       return;
     }
     const none = pillsEl.querySelector('.pills-none');
     if (none) none.remove();
-    const ids = new Set(visible.map(s => s.id));
+    const ids = new Set(visible.map(s => s.id).concat(RES_ID));
     pillsEl.querySelectorAll('.pill[data-id]').forEach(p => { if (!ids.has(p.dataset.id)) p.remove(); });
     // Pills are updated in place (not rebuilt), so hover, focus and the name animation aren't interrupted.
     visible.forEach((s, i) => {
@@ -1206,6 +1260,7 @@
       pill.setAttribute('aria-describedby', 'pillTip');
       if (pillsEl.children[i] !== pill) pillsEl.insertBefore(pill, pillsEl.children[i] || null);
     });
+    renderResPill();
     refreshTip();
   }
   pillsEl.addEventListener('scroll', hideTip, { passive: true });

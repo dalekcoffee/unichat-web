@@ -542,7 +542,7 @@
   }
   function saveResonite() {
     const room = Store.resonite.cleanRoom($('#resRoom').value);
-    if (!Store.resonite.isRoom(room)) { toast('A room code is 8 letters and digits (no 0, O, 1, I or L).', true); showResState(); return; }
+    if (!Store.resonite.isRoom(room)) { toast('A room code is 16 letters and digits (no 0, O, 1, I or L).', true); showResState(); return; }
     $('#resRoom').value = room;
     try { Store.resonite.save({ on: $('#resOn').checked, room }); }
     catch (err) { toast(err.message, true); return; }

@@ -92,14 +92,22 @@ button, input, select, textarea { font: inherit; color: inherit; }
 .pill:focus-visible { outline: none; border-color: var(--accent); box-shadow: inset 0 0 0 1px var(--accent); }
 .pill.pills-none { cursor: default; }
 .pill .pcount { font-size: 12px; font-weight: 700; color: var(--text-dim); font-variant-numeric: tabular-nums; }
-/* Status colours (U.statusTone): green live · blue connected, not live · blue ring can't tell · yellow connecting · red needs you */
+/* Status colours (U.statusTone): green live (with a LIVE tag) · grey connected, not live · blue ring can't tell ·
+   yellow connecting · red needs you. The Resonite pill (dashboard.js) is green while sending. */
 .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--text-faint); flex: none; }
 .t-live .dot { background: var(--ok); animation: on-air 2s ease-out infinite; }
-.t-ready .dot { background: var(--wait); }
+/* A live pill shows a LIVE tag in place of its dot, so "you're live" can't be mistaken for "connected" */
+.pills .pill.t-live::before, .legend .pill.t-live::before {
+  content: "LIVE"; order: 1; padding: 0 3px; border-radius: 4px;
+  background: var(--ok); color: #04210f; font-size: 9px; font-weight: 800; letter-spacing: .3px; line-height: 14px;
+}
+.pills .pill.t-live .dot, .legend .pill.t-live .dot { display: none; }
+.t-sending .dot { background: var(--ok); }
+.t-ready .dot { background: var(--text-dim); }
 .t-unknown .dot { background: transparent; box-shadow: inset 0 0 0 2px var(--wait); }
 .t-trying .dot { background: var(--try); animation: pulse 1s infinite; }
 .t-problem .dot { background: var(--err); }
-.pill.t-live { border-color: color-mix(in srgb, var(--ok) 45%, var(--line)); }
+.pill.t-live, .pill.t-sending { border-color: color-mix(in srgb, var(--ok) 45%, var(--line)); }
 .pill.t-trying { border-color: color-mix(in srgb, var(--try) 45%, var(--line)); }
 .pill.t-problem { border-color: color-mix(in srgb, var(--err) 60%, var(--line)); }
 /* Stopped trying to reconnect (needs Reconnect): the whole pill turns red. */
@@ -954,8 +962,9 @@ body.settings .sr-controls select, body.settings .test-row select { width: auto;
   .s-crumb { display: none; } /* the page is plainly Settings; keeps the back button on screen */
 }
 
-/* ---------- Medium widths: top-bar buttons show icons only (names in their tooltips) so the status pills fit ---------- */
-@media (max-width: 900px) {
+/* ---------- Medium widths: top-bar buttons show icons only (names in their tooltips) so the status pills fit (seven
+   platforms, all live with their LIVE tags, plus the Resonite pill: about 550 px) ---------- */
+@media (max-width: 1180px) {
   .iconbtn > span:not(.count-badge) { display: none; }
   .iconbtn.attention > span { display: inline; }
 }
@@ -977,14 +986,19 @@ body.settings .sr-controls select, body.settings .test-row select { width: auto;
   .popup .p-amount { font-size: 22px; }
   .popup .p-msg { font-size: 17px; }
 }
-/* Phones: each status dot sits on its platform icon's corner, so all six platforms fit */
-@media (max-width: 480px) {
+/* Phones and narrow windows: each status dot sits on its platform icon's corner, so all the pills fit */
+@media (max-width: 960px) {
   .pills { gap: 2px; }
   .pill { padding: 4px; gap: 0; border-color: transparent; background: none; }
   .pill svg { width: 18px; height: 18px; }
   .pill .pname { margin-left: 0; }
   .pill .dot { position: absolute; right: 0; bottom: 0; width: 11px; height: 11px; border: 2px solid var(--bg-elev); }
   .pill.t-unknown .dot { background: var(--bg-elev); }
+  /* Live: the LIVE tag sits across the foot of the icon, so the pill is no wider */
+  .pills .pill.t-live::before {
+    position: absolute; left: 50%; bottom: 0; transform: translateX(-50%);
+    padding: 0 2px; border-radius: 3px; font-size: 7.5px; line-height: 10px; letter-spacing: .2px; box-shadow: 0 0 0 1.5px var(--bg-elev);
+  }
   .pill.hidden-platform::after { left: 3px; width: 22px; }
 }
 /* Very narrow phones: drop the logo so all the status pills fit */
@@ -1037,12 +1051,14 @@ body.settings .sr-controls select, body.settings .test-row select { width: auto;
 @media (max-width: 400px) {
   #aboutBtn { display: none; }
 }
-@media (pointer: coarse) and (max-width: 420px) {
+@media (pointer: coarse) and (max-width: 960px) {
   .topbar { gap: 3px; }
   .iconbtn { min-width: 31px; padding: 0 4px; gap: 4px; }
   .pills { gap: 1px; }
   .pill { padding: 2px; }
   .pill svg { width: 17.6px; height: 17.6px; }
+  /* With the Resonite pill too (eight icons), a little tighter so they all still fit on a 360 px phone */
+  .pills.with-res .pill { padding: 1px; border-width: 0; }
 }
 
 @media (prefers-reduced-motion: reduce) {

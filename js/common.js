@@ -376,7 +376,7 @@
   }
 
   // ---------- Connection status: one coloured dot per platform ----------
-  // green = connected and you're live · blue = connected, not live · blue ring = connected, the platform doesn't say
+  // green + LIVE = connected and you're live · grey = connected, not live · blue ring = connected, the platform doesn't say
   // whether you're live · yellow = connecting or retrying · red = needs you (or still failing after the quiet retries,
   // see QUIET_TRIES in hub.js) · grey = off.
   const TONE_TEXT = { live: 'Live', ready: 'Connected · not live', unknown: 'Connected', trying: 'Connecting…', problem: 'Needs attention', off: 'Off' };
@@ -616,9 +616,9 @@
         const job = jobs.get(m.id);
         if (!job) return;
         if (m.type === 'audio') {
-          job.parts.push(URL.createObjectURL(new Blob([m.wav], { type: 'audio/wav' })));
+          if (!job.cut) job.parts.push(URL.createObjectURL(new Blob([m.wav], { type: 'audio/wav' })));
           job.wavs.push(m.wav);
-          if (m.last) { job.last = true; job.waiters.splice(0).forEach(w => w.done()); }
+          if (m.last) { job.last = true; job.waiters.splice(0).forEach(w => w.done()); if (job.cut) jobs.delete(m.id); }
           if (!job.settled) { job.settled = true; job.resolve(); } // the first sentence is enough to start
           if (job.onPart) job.onPart();
         } else if (m.type === 'error') {
@@ -749,8 +749,13 @@
     }
 
     function stop() {
-      playing.length = 0;
-      if (current) { const a = current; current = null; a.pause(); }
+      // Lines cut short let go of their audio: now, or once the rest of a line still being made has arrived.
+      for (const { job } of playing.splice(0)) {
+        job.cut = true;
+        job.parts.splice(0).forEach(url => URL.revokeObjectURL(url));
+        if (job.last) jobs.delete(job.id);
+      }
+      if (current) { const a = current; current = null; a.pause(); URL.revokeObjectURL(a.src); }
       if (synth) synth.cancel();
       queued = 0;
     }
@@ -834,7 +839,7 @@
     return { start: r.startedAt, chips, supporters, followers: [...followers.values()], raids };
   }
 
-  const VERSION = '0.0.39';
+  const VERSION = '0.0.40';
   window.UniChat = { VERSION, api, storePin, fmtMoney, icon, esc, safeUrl, safeColor, renderEvent, connect, Sound, Speech, classify, nameHasSlur, plainText, NAMES, PLATFORMS, ALERT_KINDS, KIND_LABEL, KIND_EMOJI, fmtTime, nameHtml, avatarHtml, swapAvatar, partsHtml, shownParts, userColor, statusTone, attemptText, fmtCount, fmtDuration,
     profileUrl, supportChips, recapSummary, plural };
 })();

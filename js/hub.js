@@ -1040,6 +1040,8 @@
           const ctx = {
             connected: current(detail => { if (!healthySince) healthySince = now(); this.healthy('connected', detail); }),
             waiting: current(detail => { if (!healthySince) healthySince = now(); this.healthy('waiting', detail); }),
+            /** Connected, but still getting ready (e.g. X: the relay is looking for the live broadcast): shown as connecting. */
+            connecting: current(detail => { if (!healthySince) healthySince = now(); this.healthy('connecting', detail); }),
             setLive: current(live => this.setLive(live)),
             stats: current(s => this.stats(s)),
             /** fn() runs when the page comes back from the background, to check the connection still works. */

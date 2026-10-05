@@ -36,10 +36,11 @@
   let pins = [];
   let recapTimer = null;
 
-  /** Tell Settings → Resonite (in this browser) how sending is going. */
+  /** Tell Settings → Resonite (in this browser) and this page's Resonite pill (dashboard.js) how sending is going. */
   function tell(next) {
     report = next;
     if (channel) channel.postMessage(Object.assign({ type: 'resonite' }, next));
+    window.dispatchEvent(new CustomEvent('unichat:resonite', { detail: next })); // this page only (not other tabs')
   }
 
   // "rgb(r, g, b)" (UniChat's readable name colour) → "#rrggbb", the only colour form the relay accepts.
