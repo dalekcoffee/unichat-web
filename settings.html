@@ -88,7 +88,7 @@ system=1     show connection messages</span>
         <div class="grow"><h2>Test</h2><p class="sub">Try alerts and the voice. Test alerts go to the chat pages open in this browser.</p></div>
       </header>
       <div class="row test-row">
-        <select id="testPlatform" aria-label="Test platform"><option value="twitch">Twitch</option><option value="tiktok">TikTok</option><option value="kick">Kick</option><option value="velora">Velora</option><option value="blaze">Blaze</option><option value="nimo">Nimo TV</option><option value="x">X</option></select>
+        <select id="testPlatform" aria-label="Test platform"><option value="twitch">Twitch</option><option value="tiktok">TikTok</option><option value="kick">Kick</option><option value="velora">Velora</option><option value="blaze">Blaze</option><option value="nimo">Nimo TV</option></select>
         <button class="btn small" type="button" data-test="chat">💬 Chat</button>
         <button class="btn small" type="button" data-test="follow">💙 Follow</button>
         <button class="btn small" type="button" data-test="donation">💰 Donation</button>
@@ -265,7 +265,7 @@ system=1     show connection messages</span>
       <p class="help"><b>While you were away</b>: the chat page keeps its last messages for 2 hours, so a reload or reopening the app brings them back. Coming back after switching apps, reloading or reopening, what was sent meanwhile is filled in where the platform allows it (Twitch, TikTok and Kick; Velora, Blaze, Nimo TV and X can't), in time order under a <b>While you were away</b> line and highlighted for the time above, without sounds or popups. Alerts you missed (gifts, subs, follows…) go to the Alerts panel only, not into the chat.</p>
       <p class="help"><b>7TV, BetterTTV and FrankerFaceZ</b>: their global emotes plus the ones set up for your Twitch channel (above), turned into pictures when anyone on any platform types them. The emote lists come from <code>7tv.io</code> and <code>api.betterttv.net</code> (FrankerFaceZ through BetterTTV), with no login.</p>
       <p class="help"><b>Twitch GIFs</b>: Tier 2 and 3 subscribers can post GIFs from GIPHY in Twitch chat. They load from GIPHY's servers (<code>media.giphy.com</code>). Turn them off to show each GIF's caption instead, with nothing loaded from GIPHY.</p>
-      <p class="help">TikTok, Velora, Blaze, Nimo TV and X send profile pictures with chat. Twitch and Kick don't, so UniChat looks them up by username (Twitch with <a href="https://api.ivr.fi/v2/docs" target="_blank" rel="noopener noreferrer">IVR</a>, a free public Twitch API; Kick on kick.com) and remembers them in this browser for a week. Turn profile pictures off to stop these lookups.</p>
+      <p class="help">TikTok, Velora, Blaze and Nimo TV send profile pictures with chat. Twitch and Kick don't, so UniChat looks them up by username (Twitch with <a href="https://api.ivr.fi/v2/docs" target="_blank" rel="noopener noreferrer">IVR</a>, a free public Twitch API; Kick on kick.com) and remembers them in this browser for a week. Turn profile pictures off to stop these lookups.</p>
     </section>
 
     <!-- Connections: live status, then each platform's settings -->
@@ -408,20 +408,9 @@ system=1     show connection messages</span>
         </div>
       </div>
 
-      <!-- X -->
+      <!-- X (paused: switch in js/store.js) -->
       <div class="plat-block" id="plat-x">
-        <header class="card-head plat-head">
-          <span class="ico plat" data-icon="x"></span>
-          <div class="grow"><h3>X</h3><p class="sub">Read as a guest, no login needed.</p></div>
-          <label class="switch" title="Turn X on or off"><input type="checkbox" data-path="x.enabled" aria-label="X enabled"></label>
-        </header>
-        <div class="card-body">
-          <div class="grid">
-            <label class="field"><span>Username or broadcast link</span><input type="text" data-path="x.channel" placeholder="yourname or x.com/i/broadcasts/…" autocomplete="off" spellcheck="false"></label>
-          </div>
-          <p class="help">Shows chat, and joins as a quiet line without a sound (once per viewer every 10 minutes, fading out after 15 seconds). X doesn't let websites read its chat, so UniChat's relay finds your live broadcast and passes the chat on. While you're not live, it keeps checking by itself.</p>
-          <p class="help">To read one particular broadcast instead, paste its link (<code>x.com/i/broadcasts/…</code>).</p>
-        </div>
+        <p class="help">X chat is paused: X now shows live chat only to signed-in viewers. Status and chat will return when there's a no-login way. <a href="docs/x-research.md">Details</a></p>
       </div>
     </section>
 
@@ -476,7 +465,7 @@ system=1     show connection messages</span>
     <section class="card adv" id="sec-diag" data-nav="Diagnostics" data-ico="bug">
       <header class="card-head">
         <span class="ico" data-ico="bug"></span>
-        <div class="grow"><h2>Diagnostics</h2><p class="sub">Connection notes and any unrecognised TikTok, Kick, Velora, Blaze, Nimo TV or X events from chat pages in this browser.</p></div>
+        <div class="grow"><h2>Diagnostics</h2><p class="sub">Connection notes and any unrecognised TikTok, Kick, Velora, Blaze or Nimo TV events from chat pages in this browser.</p></div>
       </header>
       <pre class="code-block logs" id="logs">Nothing yet. Open the chat page in this browser.</pre>
     </section>

@@ -4,6 +4,8 @@
   'use strict';
 
   const KEY = 'unichat.web.settings';
+  // One switch: X is paused (X shows live chat only to signed-in viewers). Set true to bring it back; saved X settings are kept.
+  const X_ENABLED = false;
   const PLATFORMS = ['twitch', 'tiktok', 'kick', 'velora', 'blaze', 'nimo', 'x'];
 
   function kind(sound, soundName, volume) {
@@ -147,7 +149,7 @@
       add('blaze', s.blaze.enabled, normalizeBlaze(s.blaze.channel || DEFAULTS.blaze.channel));
       add('nimo', s.nimo.enabled, normalizeNimo(s.nimo.channel || DEFAULTS.nimo.channel));
       const x = normalizeX(s.x.channel || DEFAULTS.x.channel);
-      add('x', s.x.enabled && /^[A-Za-z0-9_]{1,15}$/.test(x), x); // a username (a broadcast link isn't a channel)
+      add('x', X_ENABLED && s.x.enabled && /^[A-Za-z0-9_]{1,15}$/.test(x), x); // a username (a broadcast link isn't a channel)
       return out;
     },
   };
@@ -467,5 +469,5 @@
     return save(merge(loadSaved(), migrate(parsed)));
   }
 
-  window.UniChatStore = { KEY, DEFAULTS, RELAY_URL, RELAY_TIKTOK_USER, relayAddress, relayServes, usesRelay, resonite, load, loadSaved, save, exportJson, importJson, normalizeTwitch, normalizeTikTok, normalizeKick, normalizeVelora, normalizeBlaze, normalizeNimo, normalizeX, shareUrl, hasUrlConfig };
+  window.UniChatStore = { X_ENABLED, KEY, DEFAULTS, RELAY_URL, RELAY_TIKTOK_USER, relayAddress, relayServes, usesRelay, resonite, load, loadSaved, save, exportJson, importJson, normalizeTwitch, normalizeTikTok, normalizeKick, normalizeVelora, normalizeBlaze, normalizeNimo, normalizeX, shareUrl, hasUrlConfig };
 })();

@@ -16,7 +16,7 @@
   if (!Store || !Store.RELAY_URL || !window.UniChatHub) return;
 
   const ALERT_KINDS = ['follow', 'donation', 'sub', 'raid', 'redemption', 'hype'];
-  const PLATFORMS = ['twitch', 'tiktok', 'kick', 'velora', 'blaze', 'nimo', 'x'];
+  const PLATFORMS = ['twitch', 'tiktok', 'kick', 'velora', 'blaze', 'nimo']; // X is paused (Store.X_ENABLED)
   const BACKOFF = [2, 4, 8, 15, 30, 60];
   const SILENT_MS = 70000; // the relay says something every 25 s: this long without a word means the link is gone
   const HOLD_MS = 125000;  // the chat page gives up waiting for a voice line after 2 minutes

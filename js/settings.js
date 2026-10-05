@@ -125,7 +125,7 @@
 
   $('#soundRows').innerHTML = KINDS.map(([kind, label, hint]) => {
     const base = `alerts.kinds.${kind}`;
-    const plats = ['twitch', 'tiktok', 'kick', 'velora', 'blaze', 'nimo', 'x'].map(p => `<label title="${U.NAMES[p]}">${U.icon(p)}<input type="checkbox" data-path="${base}.platforms.${p}"></label>`).join('');
+    const plats = ['twitch', 'tiktok', 'kick', 'velora', 'blaze', 'nimo', ...(window.UniChatStore.X_ENABLED ? ['x'] : [])].map(p => `<label title="${U.NAMES[p]}">${U.icon(p)}<input type="checkbox" data-path="${base}.platforms.${p}"></label>`).join('');
     return `<div class="sound-row">
       <div class="sr-label"><b>${label}</b>${hint ? `<div class="help">${hint}</div>` : ''}</div>
       <div class="sr-controls">

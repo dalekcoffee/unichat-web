@@ -56,6 +56,8 @@
     if (unhandled++ < 5) hub.diagnostic(`X: unhandled relay message ${sample.length > 300 ? sample.slice(0, 300) + '…' : sample}`);
   }
 
+  if (!Store.X_ENABLED) return; // X is paused (switch in store.js): no connector, so no pill, status or relay socket
+
   registerConnector({
     id: 'x',
     label: 'X',

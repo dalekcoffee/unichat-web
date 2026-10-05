@@ -2,7 +2,7 @@
   "id": "./",
   "name": "UniChat",
   "short_name": "UniChat",
-  "description": "Twitch, TikTok, Kick, Velora, Blaze, Nimo TV and X chat in one read-only window.",
+  "description": "Twitch, TikTok, Kick, Velora, Blaze and Nimo TV chat in one read-only window.",
   "start_url": "./index.html",
   "scope": "./",
   "display": "standalone",

@@ -953,7 +953,7 @@
   const aboutLayer = $('#aboutLayer');
   const aboutBtn = $('#aboutBtn');
   $('#aboutVersion').textContent = `Version ${U.VERSION}`;
-  $('#aboutPlats').innerHTML = ['twitch', 'tiktok', 'kick', 'velora', 'blaze', 'nimo', 'x'].map(p => `<span title="${U.NAMES[p]}">${U.icon(p)}</span>`).join('');
+  $('#aboutPlats').innerHTML = ['twitch', 'tiktok', 'kick', 'velora', 'blaze', 'nimo', ...(window.UniChatStore.X_ENABLED ? ['x'] : [])].map(p => `<span title="${U.NAMES[p]}">${U.icon(p)}</span>`).join('');
   function openAbout() { aboutLayer.classList.remove('hidden'); $('#aboutClose').focus(); }
   function closeAbout() {
     if (aboutLayer.classList.contains('hidden')) return;
