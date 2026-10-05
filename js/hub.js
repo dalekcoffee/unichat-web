@@ -1,5 +1,5 @@
 /* UniChat Web hub: everything the desktop app's server did, running in this browser tab.
-   - connects to each platform (connectors registered by twitch.js, tiktok.js, kick.js, velora.js, blaze.js and nimo.js) with forever-retry backoff
+   - connects to each platform (connectors registered by twitch.js, tiktok.js, kick.js, velora.js, blaze.js, nimo.js and x.js) with forever-retry backoff
    - keeps chat history, alerts, questions, pins and "thanked" state (saved per browser)
    - speaks the same message protocol as the desktop server, so the dashboard/overlay code is shared. */
 (function () {
@@ -25,7 +25,7 @@
   const CONNECTION_NOTES = ['connection-lost', 'connection-failing', 'connection-stopped', 'reconnected'];
   // Phones pause a page in the background (another app, screen off) and the platforms drop its connections. Hidden at
   // least AWAY_MS counts as "was away"; a drop noticed while hidden or within RESUME_GRACE_MS of coming back is the
-  // phone's doing, not a real problem (see pausedDrop). The grace outlasts the slowest "still there?" check (30 s).
+  // phone's doing, not a real problem (see pausedDrop). The grace outlasts the slowest "still there?" check (35 s, X's).
   const AWAY_MS = 5000, RESUME_GRACE_MS = 45000;
   const PHONE = matchMedia('(pointer: coarse)'); // touch-first devices: phones and tablets
 
@@ -275,6 +275,7 @@
     velora: ['velora.tv'],
     blaze: ['blaze.stream'],
     nimo: ['nimostatic.tv', 'nimo.tv'],
+    x: ['pbs.twimg.com', 'abs.twimg.com'],
   };
   const reportedHosts = new Set();
   function imageFor(platform, url) {
@@ -321,7 +322,7 @@
   const sharedEmoteUrl = url => (typeof url === 'string' && SHARED_EMOTE.test(url) ? url : '');
 
   // Values that become part of a line's CSS classes (saved events can be edited in the browser's storage).
-  const EVENT_PLATFORMS = ['twitch', 'tiktok', 'kick', 'velora', 'blaze', 'nimo', 'youtube', 'system'];
+  const EVENT_PLATFORMS = ['twitch', 'tiktok', 'kick', 'velora', 'blaze', 'nimo', 'x', 'youtube', 'system'];
   const EVENT_KINDS = ['chat', 'system', ...ALERT_KINDS];
   const LEVELS = ['info', 'ok', 'warn', 'error'];
 
@@ -738,7 +739,7 @@
   }
 
   function statusList() {
-    const order = ['twitch', 'tiktok', 'kick', 'velora', 'blaze', 'nimo', 'youtube'];
+    const order = ['twitch', 'tiktok', 'kick', 'velora', 'blaze', 'nimo', 'x', 'youtube'];
     return [...state.statuses.values()].sort((a, b) => order.indexOf(a.platform) - order.indexOf(b.platform));
   }
 
@@ -882,7 +883,7 @@
   // connect first. The others wait until those two have connected (or given up; at most TURN_WAIT_MS), then follow in
   // the top bar's order, a moment apart.
   const FIRST = ['twitch', 'tiktok'];
-  const ORDER = ['twitch', 'tiktok', 'kick', 'velora', 'blaze', 'nimo'];
+  const ORDER = ['twitch', 'tiktok', 'kick', 'velora', 'blaze', 'nimo', 'x'];
   const TURN_WAIT_MS = 8000, TURN_GAP_MS = 400;
   const trying = c => c.status.state === 'connecting' || c.status.state === 'reconnecting';
   async function waitTurn(c, signal) {
@@ -1134,7 +1135,7 @@
   const NAMES = ['TestViewer', 'CozyGamer42', 'NightOwl', 'PixelPanda', 'SirChatsALot'];
   function testEvent(platform, kind) {
     const name = NAMES[Math.floor(Math.random() * NAMES.length)];
-    const LABELS = { twitch: 'Twitch', tiktok: 'TikTok', kick: 'Kick', velora: 'Velora', blaze: 'Blaze', nimo: 'Nimo TV' };
+    const LABELS = { twitch: 'Twitch', tiktok: 'TikTok', kick: 'Kick', velora: 'Velora', blaze: 'Blaze', nimo: 'Nimo TV', x: 'X' };
     const p = Object.prototype.hasOwnProperty.call(LABELS, platform) ? platform : 'twitch';
     const e = { platform: p, kind, code: 'test', user: { name, login: name.toLowerCase(), roles: [] }, parts: [] };
     const DONATIONS = {
@@ -1144,6 +1145,7 @@
       blaze: { title: 'sent a tip', amount: '320K' },
       velora: { kind: 'redemption', title: 'redeemed Hydrate', amount: '100 points' }, // Velora tips need a login; redemptions show in chat
       nimo: { title: 'sent Duck Rain Coat x2', amount: '598 diamonds', value: 598, unit: 'diamonds' },
+      x: { title: 'sent a tip', amount: '$5.00' }, // X chat carries no tips; this just shows how an alert looks
     };
     switch (kind) {
       case 'follow': e.title = 'followed'; break;

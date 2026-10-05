@@ -647,48 +647,9 @@
   });
 
   // ---------- Recap tab: this stream's supporters, followers and raids, for thanking people ----------
-  const MONEY_LIKE = ['bits', 'coins', 'KICKs', 'diamonds'];
-  const unitText = (unit, v) => (MONEY_LIKE.includes(unit) ? `${Math.round(v).toLocaleString()} ${unit}` : U.fmtMoney(unit === 'money' ? '' : unit, v));
-  const plural = (n, word) => `${n.toLocaleString()} ${word}${n === 1 ? '' : 's'}`;
-
-  /** The recap grouped per person: { start, chips, supporters, followers, raids }. */
-  function summarizeRecap(r) {
-    const items = r.items;
-    const money = new Map();
-    let subs = 0, gifted = 0, tips = 0, redemptions = 0;
-    const people = new Map();
-    const followers = new Map();
-    const raids = [];
-    for (const i of items) {
-      const key = `${i.platform}:${i.login || String(i.name).toLowerCase()}`;
-      if (i.kind === 'follow') { if (!followers.has(key)) followers.set(key, i); continue; }
-      if (i.kind === 'raid') { raids.push(i); continue; }
-      if (i.kind === 'redemption') { redemptions++; continue; }
-      let p = people.get(key);
-      if (!p) people.set(key, p = { platform: i.platform, name: i.name, subs: 0, gifts: 0, money: new Map(), tips: [], actions: 0, last: 0 });
-      p.actions++;
-      p.last = Math.max(p.last, i.ts);
-      if (i.kind === 'sub' && i.unit === 'gifts') { const n = Math.max(1, i.value || 1); p.gifts += n; gifted += n; }
-      else if (i.kind === 'sub') { p.subs++; subs++; }
-      else if (i.value > 0 && i.unit) { p.money.set(i.unit, (p.money.get(i.unit) || 0) + i.value); money.set(i.unit, (money.get(i.unit) || 0) + i.value); }
-      else { p.tips.push(i.amount); tips++; }
-    }
-    const supporters = [...people.values()].sort((a, b) => b.actions - a.actions || b.last - a.last).map(p => ({
-      platform: p.platform, name: p.name,
-      what: [p.subs ? (p.subs > 1 ? plural(p.subs, 'sub') : 'subbed') : '', p.gifts ? `gifted ${plural(p.gifts, 'sub')}` : '',
-        ...[...p.money].map(([u, v]) => unitText(u, v)), ...p.tips.map(a => (a ? `a ${a} tip` : 'a tip'))].filter(Boolean).join(', '),
-    }));
-    const chips = [
-      followers.size ? `💙 ${plural(followers.size, 'follow')}` : '',
-      subs ? `⭐ ${plural(subs, 'sub')}` : '',
-      gifted ? `🎁 ${plural(gifted, 'gifted sub')}` : '',
-      ...[...money].map(([u, v]) => `💰 ${unitText(u, v)}`),
-      tips ? `💰 ${plural(tips, 'tip')}` : '',
-      raids.length ? `🚀 ${plural(raids.length, 'raid')}` : '',
-      redemptions ? `🎟️ ${plural(redemptions, 'redemption')}` : '',
-    ].filter(Boolean);
-    return { start: r.startedAt, chips, supporters, followers: [...followers.values()], raids };
-  }
+  // The summary is shared with resonite.js (common.js), so the in-game Recap tab matches this one.
+  const plural = U.plural;
+  const summarizeRecap = U.recapSummary;
 
   function recapText(sum) {
     const lines = [`Stream recap, ${U.fmtTime(sum.start)} to ${U.fmtTime(Date.now())}`];
@@ -929,22 +890,7 @@
     return new Date(ms).toLocaleDateString([], { year: 'numeric', month: 'short', day: 'numeric' });
   }
 
-  function supportChips(t) {
-    if (!t) return [];
-    const chips = [];
-    if (t.messages) chips.push(`<b>${t.messages}</b> message${t.messages === 1 ? '' : 's'}`);
-    if (t.follows) chips.push('followed');
-    if (t.subs) chips.push(`<b>${t.subs}</b> sub${t.subs === 1 ? '' : 's'}`);
-    if (t.giftedSubs) chips.push(`<b>${t.giftedSubs}</b> gifted`);
-    if (t.bits) chips.push(`<b>${t.bits.toLocaleString()}</b> bits`);
-    if (t.coins) chips.push(`<b>${t.coins.toLocaleString()}</b> coins`);
-    if (t.kicks) chips.push(`<b>${t.kicks.toLocaleString()}</b> KICKs`);
-    if (t.diamonds) chips.push(`<b>${Number(t.diamonds).toLocaleString()}</b> diamonds`);
-    for (const [unit, v] of Object.entries(t.money || {})) chips.push(`<b>${U.esc(U.fmtMoney(unit, v))}</b>`);
-    if (t.raids) chips.push(`raided with <b>${t.raidViewers}</b>`);
-    if (t.redemptions) chips.push(`<b>${t.redemptions}</b> redemption${t.redemptions === 1 ? '' : 's'}`);
-    return chips;
-  }
+  const supportChips = t => U.supportChips(t, n => `<b>${U.esc(n)}</b>`);
 
   async function openViewerCard(platform, login) {
     if (!platform || !login) return;
@@ -971,6 +917,8 @@
     const recent = s && s.recent && s.recent.length
       ? s.recent.slice().reverse().map(r => `<div class="r"><span class="ts">${U.fmtTime(r.ts)}</span>${U.esc(r.text)}</div>`).join('')
       : '<div class="help">No messages this stream.</div>';
+    const profile = U.profileUrl(platform, { login: user.login || login });
+    const site = U.NAMES[platform] || platform;
     viewerCard.innerHTML =
       `<div class="vc-head">${avatar}<div>
           <div class="vc-name" style="color:${U.userColor(user, theme)}">${U.esc(user.name || login)}</div>
@@ -980,6 +928,7 @@
       <div class="vc-stats">${chips.length ? chips.map(c => `<span class="stat">${c}</span>`).join('') : '<span class="help">Nothing counted this stream yet.</span>'}</div>
       <div class="vc-recent">${recent}</div>
       <div class="vc-actions">
+        ${profile ? `<a class="btn" href="${U.esc(profile)}" target="_blank" rel="noopener noreferrer" title="Open their ${U.esc(site)} page in a new tab">View profile ↗</a>` : ''}
         <button class="btn danger" type="button" id="vcHide" title="Adds them to Settings → Filters → Always hide these users">Hide this user</button>
         <button class="btn" type="button" id="vcClose">Close</button>
       </div>`;
@@ -1002,7 +951,7 @@
   const aboutLayer = $('#aboutLayer');
   const aboutBtn = $('#aboutBtn');
   $('#aboutVersion').textContent = `Version ${U.VERSION}`;
-  $('#aboutPlats').innerHTML = ['twitch', 'tiktok', 'kick', 'velora', 'blaze', 'nimo'].map(p => `<span title="${U.NAMES[p]}">${U.icon(p)}</span>`).join('');
+  $('#aboutPlats').innerHTML = ['twitch', 'tiktok', 'kick', 'velora', 'blaze', 'nimo', 'x'].map(p => `<span title="${U.NAMES[p]}">${U.icon(p)}</span>`).join('');
   function openAbout() { aboutLayer.classList.remove('hidden'); $('#aboutClose').focus(); }
   function closeAbout() {
     if (aboutLayer.classList.contains('hidden')) return;
@@ -1119,14 +1068,16 @@
 
   // ---------- Small notices (e.g. sound tests) ----------
   let toastTimer;
-  function showToast(text) {
+  function showToast(text, ms = 2500) {
     let el = document.querySelector('.toast');
     if (!el) { el = document.createElement('div'); el.className = 'toast'; document.body.appendChild(el); }
     el.textContent = text;
     el.style.opacity = '1';
     clearTimeout(toastTimer);
-    toastTimer = setTimeout(() => { el.style.opacity = '0'; }, 2500);
+    toastTimer = setTimeout(() => { el.style.opacity = '0'; }, ms);
   }
+  // Notices from other parts of this page (resonite.js: someone hidden from the in-game panel).
+  window.addEventListener('unichat:toast', ev => { if (ev.detail) showToast(String(ev.detail), 8000); });
 
   // ---------- Clear chat (this screen; the Alerts panel keeps everything) ----------
   $('#clearBtn').addEventListener('click', () => {

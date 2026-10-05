@@ -4,10 +4,10 @@
   'use strict';
 
   const KEY = 'unichat.web.settings';
-  const PLATFORMS = ['twitch', 'tiktok', 'kick', 'velora', 'blaze', 'nimo'];
+  const PLATFORMS = ['twitch', 'tiktok', 'kick', 'velora', 'blaze', 'nimo', 'x'];
 
   function kind(sound, soundName, volume) {
-    return { sound, soundName, volume, platforms: { twitch: true, tiktok: true, kick: true, velora: true, blaze: true, nimo: true } };
+    return { sound, soundName, volume, platforms: { twitch: true, tiktok: true, kick: true, velora: true, blaze: true, nimo: true, x: true } };
   }
 
   // This copy of UniChat opens on DalekCoffee's channels, so a new browser only needs the Euler key. A blank name means
@@ -25,6 +25,9 @@
     // channel: a streamer's name, or the number from nimo.tv/live/<number>. roomId: the room picked in Settings → Find
     // (Nimo names aren't unique); it's only used while it belongs to that name. 0 = none picked.
     nimo: { enabled: true, channel: 'dalekcoffee', roomId: 1592342521 },
+    // channel: a username, or a broadcast link kept as "i/broadcasts/<id>" (see normalizeX); read through the relay (x.js).
+    // No name by default, so X stays off until one is set.
+    x: { enabled: true, channel: '' },
     alerts: {
       // Settings → Alerts & voice → Volume: turns every sound and the voice up or down together, on top of each one's own
       // volume. 1 = as set (the slider shows 50%), 2 = twice as loud (100%). Separate from the voice's own volume (tts.volume).
@@ -142,6 +145,8 @@
       add('velora', s.velora.enabled, normalizeVelora(s.velora.channel || DEFAULTS.velora.channel));
       add('blaze', s.blaze.enabled, normalizeBlaze(s.blaze.channel || DEFAULTS.blaze.channel));
       add('nimo', s.nimo.enabled, normalizeNimo(s.nimo.channel || DEFAULTS.nimo.channel));
+      const x = normalizeX(s.x.channel || DEFAULTS.x.channel);
+      add('x', s.x.enabled && /^[A-Za-z0-9_]{1,15}$/.test(x), x); // a username (a broadcast link isn't a channel)
       return out;
     },
   };
@@ -219,6 +224,18 @@
     return s.replace(/^@/, '').replace(/[\p{C}<>"'`\\]/gu, '').replace(/\s+/g, ' ').trim().slice(0, 40);
   }
 
+  /**
+   * X: a username or a broadcast link. "https://x.com/SomeName" or "@SomeName" → "SomeName" (kept as typed: X names
+   * ignore case); "https://twitter.com/i/broadcasts/1AbCdEfGhIjKl?s=20" → "i/broadcasts/1AbCdEfGhIjKl" (the ID is
+   * case-sensitive). Any other x.com/i/… page (e.g. a Space) stays recognisably wrong, so the status says so (x.js).
+   */
+  function normalizeX(v) {
+    const s = String(v || '').trim().replace(/^(?:https?:\/\/)?(?:[a-z0-9-]+\.)*(?:x|twitter)\.com(?:\/|$)/i, '').replace(/^@/, '');
+    const [first, second = '', third = ''] = s.split(/[?#]/)[0].split('/');
+    if (first.toLowerCase() !== 'i') return first.replace(/[^A-Za-z0-9_]/g, '').slice(0, 40);
+    return `i/${second.toLowerCase().replace(/[^a-z]/g, '')}/${third.replace(/[^A-Za-z0-9]/g, '')}`.slice(0, 60);
+  }
+
   function normalize(s) {
     s.twitch.channel = normalizeTwitch(s.twitch.channel) || DEFAULTS.twitch.channel;
     s.tikTok.username = normalizeTikTok(s.tikTok.username) || DEFAULTS.tikTok.username;
@@ -227,6 +244,7 @@
     s.velora.channel = normalizeVelora(s.velora.channel) || DEFAULTS.velora.channel;
     s.blaze.channel = normalizeBlaze(s.blaze.channel) || DEFAULTS.blaze.channel;
     s.nimo.channel = normalizeNimo(s.nimo.channel) || DEFAULTS.nimo.channel;
+    s.x.channel = normalizeX(s.x.channel) || DEFAULTS.x.channel;
     s.preview.beam = normalizeName(s.preview.beam, 'beamstream.gg') || DEFAULTS.preview.beam;
     s.nimo.roomId = Math.round(clamp(s.nimo.roomId, 0, 1e12, 0));
     s.tikTok.eulerKey = String(s.tikTok.eulerKey || '').trim();
@@ -293,7 +311,7 @@
   }
 
   // ---------- Bookmarkable links ----------
-  // Channel names go in the readable part (?twitch=…&tiktok=…&kick=…&velora=…&blaze=…&nimo=…). Every other setting you changed goes in a
+  // Channel names go in the readable part (?twitch=…&tiktok=…&kick=…&velora=…&blaze=…&nimo=…&x=…). Every other setting you changed goes in a
   // compact code after "#s=". Browsers never send the part after "#" to the website, so it stays private.
 
   /** Only the values that differ from the defaults (keeps links short). */
@@ -322,7 +340,7 @@
   }
 
   /**
-   * Settings carried in the address bar: ?twitch=, ?tiktok=, ?kick=, ?velora=, ?blaze=, ?nimo=, ?theme= and #s=<code>. The Euler key is only ever read
+   * Settings carried in the address bar: ?twitch=, ?tiktok=, ?kick=, ?velora=, ?blaze=, ?nimo=, ?x=, ?theme= and #s=<code>. The Euler key is only ever read
    * from the #s= code: the part before # is sent to the web host (and can end up in its logs), the part after # isn't.
    */
   function urlOverrides() {
@@ -340,6 +358,7 @@
     if (q.has('blaze')) o.blaze = Object.assign(o.blaze || {}, { channel: q.get('blaze'), enabled: true });
     // A room picked for another name in this browser shouldn't follow a link to a different streamer.
     if (q.has('nimo')) o.nimo = Object.assign({ roomId: 0 }, o.nimo || {}, { channel: q.get('nimo'), enabled: true });
+    if (q.has('x')) o.x = Object.assign(o.x || {}, { channel: q.get('x'), enabled: true });
     if (q.get('theme') === 'light' || q.get('theme') === 'dark') o.display = Object.assign(o.display || {}, { theme: q.get('theme') });
     return o;
   }
@@ -360,7 +379,7 @@
 
   function hasUrlConfig() {
     const q = new URLSearchParams(location.search);
-    return ['twitch', 'tiktok', 'kick', 'velora', 'blaze', 'nimo', 'theme'].some(k => q.has(k)) || /(^#|&)s=/.test(location.hash);
+    return ['twitch', 'tiktok', 'kick', 'velora', 'blaze', 'nimo', 'x', 'theme'].some(k => q.has(k)) || /(^#|&)s=/.test(location.hash);
   }
 
   /**
@@ -376,6 +395,7 @@
     if (s.velora.channel) q.set('velora', s.velora.channel);
     if (s.blaze.channel) q.set('blaze', s.blaze.channel);
     if (s.nimo.channel) q.set('nimo', s.nimo.channel);
+    if (s.x.channel) q.set('x', s.x.channel);
     const rest = clone(s);
     delete rest.twitch.channel;
     delete rest.tikTok.username;
@@ -383,6 +403,7 @@
     delete rest.velora.channel;
     delete rest.blaze.channel;
     delete rest.nimo.channel;
+    delete rest.x.channel;
     if (includeKey && rest.tikTok.eulerKey && !usesRelay(s)) {
       // keep it (after the #, so it's never sent to the website); links that use the relay don't need it
     } else {
@@ -396,6 +417,7 @@
     delete base.velora.channel;
     delete base.blaze.channel;
     delete base.nimo.channel;
+    delete base.x.channel;
     const changed = diff(rest, base) || {};
     // The picked Nimo room always travels with the name (?nimo= alone means "search by name").
     if (s.nimo.roomId) changed.nimo = Object.assign(changed.nimo || {}, { roomId: s.nimo.roomId });
@@ -435,9 +457,9 @@
     if (text.length > 2000000) throw new Error('File is too big to be UniChat settings');
     let parsed = JSON.parse(text);
     if (isObj(parsed) && isObj(parsed.settings)) parsed = parsed.settings; // current format (older files were the bare settings)
-    if (!isObj(parsed) || !(isObj(parsed.twitch) || isObj(parsed.tikTok) || isObj(parsed.kick) || isObj(parsed.velora) || isObj(parsed.blaze) || isObj(parsed.nimo) || isObj(parsed.display))) throw new Error('Not a UniChat settings file');
+    if (!isObj(parsed) || !(isObj(parsed.twitch) || isObj(parsed.tikTok) || isObj(parsed.kick) || isObj(parsed.velora) || isObj(parsed.blaze) || isObj(parsed.nimo) || isObj(parsed.x) || isObj(parsed.display))) throw new Error('Not a UniChat settings file');
     return save(merge(loadSaved(), migrate(parsed)));
   }
 
-  window.UniChatStore = { KEY, DEFAULTS, RELAY_URL, RELAY_TIKTOK_USER, relayAddress, relayServes, usesRelay, resonite, load, loadSaved, save, exportJson, importJson, normalizeTwitch, normalizeTikTok, normalizeKick, normalizeVelora, normalizeBlaze, normalizeNimo, shareUrl, hasUrlConfig };
+  window.UniChatStore = { KEY, DEFAULTS, RELAY_URL, RELAY_TIKTOK_USER, relayAddress, relayServes, usesRelay, resonite, load, loadSaved, save, exportJson, importJson, normalizeTwitch, normalizeTikTok, normalizeKick, normalizeVelora, normalizeBlaze, normalizeNimo, normalizeX, shareUrl, hasUrlConfig };
 })();

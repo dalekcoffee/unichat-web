@@ -11,10 +11,11 @@
     velora: '<svg viewBox="0 0 24 24"><rect width="24" height="24" rx="5" fill="#ffd700"/><path fill="#14110a" d="M5.2 6h3.3l3.5 8.4L15.5 6h3.3l-5.3 12h-3z"/></svg>',
     blaze: '<svg viewBox="0 0 24 24"><path fill="#ff7a00" d="M12.6 1.5c.6 3.3-.9 5.1-2.5 6.9C8.5 10.1 7 11.9 7 14.6a5 5 0 0 0 10 .2c0-2.4-1.1-4.1-2.3-5.5.1 1.7-.5 3-1.6 3.6.6-3.9-.5-8.1-.5-11.4Z"/><path fill="#ffd21f" d="M12 21.5a3.2 3.2 0 0 1-3.2-3.3c0-1.7 1-2.8 2-3.9.2 1.1.8 1.8 1.6 2 .1-1.4.5-2.4 1.3-3.5.6 1.4 1.5 2.6 1.5 4.6a3.2 3.2 0 0 1-3.2 4.1Z"/></svg>',
     nimo: '<svg viewBox="0 0 24 24"><path fill="#ffc83d" d="M11.8 6.6 15 1.9c.3-.4.9-.2.9.3l.2 4.4z"/><rect x="2" y="6" width="20" height="16" rx="5" fill="#6c5cff"/><circle cx="8.4" cy="13.8" r="1.9" fill="#fff"/><path fill="none" stroke="#fff" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" d="m16.7 11.5-2.9 2.3 2.9 2.3"/></svg>',
+    x: '<svg viewBox="0 0 24 24"><rect width="24" height="24" rx="5" fill="#000"/><path fill="#fff" transform="translate(4.2 4.2) scale(.65)" d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-5.214-6.817L4.99 21.75H1.68l7.73-8.835L1.254 2.25H8.08l4.713 6.231zm-1.161 17.52h1.833L7.084 4.126H5.117z"/></svg>',
     system: '<svg viewBox="0 0 24 24"><path fill="#8b8fa3" d="M12 2a10 10 0 1 0 0 20 10 10 0 0 0 0-20Zm1 15h-2v-6h2v6Zm0-8h-2V7h2v2Z"/></svg>',
   };
-  const NAMES = { twitch: 'Twitch', tiktok: 'TikTok', kick: 'Kick', velora: 'Velora', blaze: 'Blaze', nimo: 'Nimo TV', youtube: 'YouTube', system: 'UniChat' };
-  const PLATFORMS = ['twitch', 'tiktok', 'kick', 'velora', 'blaze', 'nimo', 'youtube'];
+  const NAMES = { twitch: 'Twitch', tiktok: 'TikTok', kick: 'Kick', velora: 'Velora', blaze: 'Blaze', nimo: 'Nimo TV', x: 'X', youtube: 'YouTube', system: 'UniChat' };
+  const PLATFORMS = ['twitch', 'tiktok', 'kick', 'velora', 'blaze', 'nimo', 'x', 'youtube'];
 
   const BADGES = {
     broadcaster: ['Streamer', '<path d="M2 4.5A1.5 1.5 0 0 1 3.5 3h6A1.5 1.5 0 0 1 11 4.5v1.3l3-2V12l-3-2v1.5A1.5 1.5 0 0 1 9.5 13h-6A1.5 1.5 0 0 1 2 11.5z"/>'],
@@ -144,6 +145,7 @@
       if (s.velora && s.velora.channel) myNames.push(s.velora.channel);
       if (s.blaze && s.blaze.channel) myNames.push(s.blaze.channel);
       if (s.nimo && s.nimo.channel && !/^\d+$/.test(s.nimo.channel)) myNames.push(s.nimo.channel); // not a room number
+      if (s.x && s.x.channel && !s.x.channel.includes('/')) myNames.push(s.x.channel); // not a broadcast link
     }
     r = {
       hideBots: !!f.hideBots,
@@ -757,6 +759,82 @@
     return { available: !!synth || typeof Worker === 'function', voices, say, forEvent, prepare, willRead: (e, settings, cls) => !!lineFor(e, settings, cls), warmUp, stop, speaking, KOKORO };
   })();
 
-  const VERSION = '0.0.37';
-  window.UniChat = { VERSION, api, storePin, fmtMoney, icon, esc, safeUrl, safeColor, renderEvent, connect, Sound, Speech, classify, nameHasSlur, plainText, NAMES, PLATFORMS, ALERT_KINDS, KIND_LABEL, KIND_EMOJI, fmtTime, nameHtml, avatarHtml, swapAvatar, partsHtml, shownParts, userColor, statusTone, attemptText, fmtCount, fmtDuration };
+  // ---------- Viewers: their page on their platform, their support, the stream's recap (chat page and Resonite) ----------
+  // Logins are lower case, as the connectors keep them. Nimo TV has no public profile pages, so none there.
+  const PROFILE = {
+    twitch: [/^[a-z0-9_]{1,25}$/, 'https://www.twitch.tv/'], tiktok: [/^[a-z0-9_.]{1,40}$/, 'https://www.tiktok.com/@'],
+    kick: [/^[a-z0-9-]{1,40}$/, 'https://kick.com/'], velora: [/^[a-z0-9_.-]{1,40}$/, 'https://velora.tv/'], blaze: [/^[a-z0-9_-]{1,40}$/, 'https://blaze.stream/'],
+    x: [/^[a-z0-9_]{1,15}$/, 'https://x.com/'],
+  };
+  /** The viewer's page on their platform, or '' (the relay builds Resonite's the same way). */
+  function profileUrl(platform, user) {
+    const login = String((user && user.login) || '').toLowerCase();
+    return own(PROFILE, platform) && PROFILE[platform][0].test(login) ? PROFILE[platform][1] + login : '';
+  }
+
+  /** A viewer's support this stream as short phrases ("12 messages", "followed"…); bold(text) wraps each number. */
+  function supportChips(t, bold = s => String(s)) {
+    if (!t) return [];
+    const chips = [];
+    if (t.messages) chips.push(`${bold(t.messages)} message${t.messages === 1 ? '' : 's'}`);
+    if (t.follows) chips.push('followed');
+    if (t.subs) chips.push(`${bold(t.subs)} sub${t.subs === 1 ? '' : 's'}`);
+    if (t.giftedSubs) chips.push(`${bold(t.giftedSubs)} gifted`);
+    if (t.bits) chips.push(`${bold(t.bits.toLocaleString())} bits`);
+    if (t.coins) chips.push(`${bold(t.coins.toLocaleString())} coins`);
+    if (t.kicks) chips.push(`${bold(t.kicks.toLocaleString())} KICKs`);
+    if (t.diamonds) chips.push(`${bold(Number(t.diamonds).toLocaleString())} diamonds`);
+    for (const [unit, v] of Object.entries(t.money || {})) chips.push(bold(fmtMoney(unit, v)));
+    if (t.raids) chips.push(`raided with ${bold(t.raidViewers)}`);
+    if (t.redemptions) chips.push(`${bold(t.redemptions)} redemption${t.redemptions === 1 ? '' : 's'}`);
+    return chips;
+  }
+
+  // The Recap tab: this stream's supporters, followers and raids, for thanking people.
+  const MONEY_LIKE = ['bits', 'coins', 'KICKs', 'diamonds'];
+  const unitText = (unit, v) => (MONEY_LIKE.includes(unit) ? `${Math.round(v).toLocaleString()} ${unit}` : fmtMoney(unit === 'money' ? '' : unit, v));
+  const plural = (n, word) => `${n.toLocaleString()} ${word}${n === 1 ? '' : 's'}`;
+
+  /** The recap grouped per person: { start, chips, supporters, followers, raids }. */
+  function recapSummary(r) {
+    const items = r.items;
+    const money = new Map();
+    let subs = 0, gifted = 0, tips = 0, redemptions = 0;
+    const people = new Map();
+    const followers = new Map();
+    const raids = [];
+    for (const i of items) {
+      const key = `${i.platform}:${i.login || String(i.name).toLowerCase()}`;
+      if (i.kind === 'follow') { if (!followers.has(key)) followers.set(key, i); continue; }
+      if (i.kind === 'raid') { raids.push(i); continue; }
+      if (i.kind === 'redemption') { redemptions++; continue; }
+      let p = people.get(key);
+      if (!p) people.set(key, p = { platform: i.platform, name: i.name, subs: 0, gifts: 0, money: new Map(), tips: [], actions: 0, last: 0 });
+      p.actions++;
+      p.last = Math.max(p.last, i.ts);
+      if (i.kind === 'sub' && i.unit === 'gifts') { const n = Math.max(1, i.value || 1); p.gifts += n; gifted += n; }
+      else if (i.kind === 'sub') { p.subs++; subs++; }
+      else if (i.value > 0 && i.unit) { p.money.set(i.unit, (p.money.get(i.unit) || 0) + i.value); money.set(i.unit, (money.get(i.unit) || 0) + i.value); }
+      else { p.tips.push(i.amount); tips++; }
+    }
+    const supporters = [...people.values()].sort((a, b) => b.actions - a.actions || b.last - a.last).map(p => ({
+      platform: p.platform, name: p.name,
+      what: [p.subs ? (p.subs > 1 ? plural(p.subs, 'sub') : 'subbed') : '', p.gifts ? `gifted ${plural(p.gifts, 'sub')}` : '',
+        ...[...p.money].map(([u, v]) => unitText(u, v)), ...p.tips.map(a => (a ? `a ${a} tip` : 'a tip'))].filter(Boolean).join(', '),
+    }));
+    const chips = [
+      followers.size ? `💙 ${plural(followers.size, 'follow')}` : '',
+      subs ? `⭐ ${plural(subs, 'sub')}` : '',
+      gifted ? `🎁 ${plural(gifted, 'gifted sub')}` : '',
+      ...[...money].map(([u, v]) => `💰 ${unitText(u, v)}`),
+      tips ? `💰 ${plural(tips, 'tip')}` : '',
+      raids.length ? `🚀 ${plural(raids.length, 'raid')}` : '',
+      redemptions ? `🎟️ ${plural(redemptions, 'redemption')}` : '',
+    ].filter(Boolean);
+    return { start: r.startedAt, chips, supporters, followers: [...followers.values()], raids };
+  }
+
+  const VERSION = '0.0.38';
+  window.UniChat = { VERSION, api, storePin, fmtMoney, icon, esc, safeUrl, safeColor, renderEvent, connect, Sound, Speech, classify, nameHasSlur, plainText, NAMES, PLATFORMS, ALERT_KINDS, KIND_LABEL, KIND_EMOJI, fmtTime, nameHtml, avatarHtml, swapAvatar, partsHtml, shownParts, userColor, statusTone, attemptText, fmtCount, fmtDuration,
+    profileUrl, supportChips, recapSummary, plural };
 })();

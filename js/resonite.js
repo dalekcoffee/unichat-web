@@ -5,7 +5,10 @@
    when it waits for its voice line the panel's banner and sound wait too. It sends to this browser's room (Settings →
    Resonite: the room code, kept here; panels read the panel code worked out from it). One device sends to a room at a
    time: the same channels on another device take over (this one stops until it's turned on again), and while this
-   page sends, someone else's page is told the room is in use. */
+   page sends, someone else's page is told the room is in use.
+   v4 panels also show this page's Questions, Pinned and Recap, and can ask for a viewer card (answered from this page's
+   viewer data, filters applied) or, for the panel's owner, hide a viewer (added to Settings → Filters, with a notice
+   here so it can be undone). */
 (function () {
   'use strict';
   const U = window.UniChat;
@@ -13,7 +16,7 @@
   if (!Store || !Store.RELAY_URL || !window.UniChatHub) return;
 
   const ALERT_KINDS = ['follow', 'donation', 'sub', 'raid', 'redemption', 'hype'];
-  const PLATFORMS = ['twitch', 'tiktok', 'kick', 'velora', 'blaze', 'nimo'];
+  const PLATFORMS = ['twitch', 'tiktok', 'kick', 'velora', 'blaze', 'nimo', 'x'];
   const BACKOFF = [2, 4, 8, 15, 30, 60];
   const SILENT_MS = 70000; // the relay says something every 25 s: this long without a word means the link is gone
   const HOLD_MS = 125000;  // the chat page gives up waiting for a voice line after 2 minutes
@@ -29,6 +32,9 @@
   let sentTones = ''; // the status last sent (statuses change often without changing the dots)
   const held = new Map(); // id → { m, timer }: new alerts waiting until the chat page plays them
   const played = [];      // ids the chat page played before this script saw them (it can hear first)
+  let questions = [];     // the hub's Questions list (events), and its pins
+  let pins = [];
+  let recapTimer = null;
 
   /** Tell Settings → Resonite (in this browser) how sending is going. */
   function tell(next) {
@@ -43,11 +49,11 @@
     return m ? '#' + m.slice(1, 4).map(n => Math.min(255, Number(n)).toString(16).padStart(2, '0')).join('') : null;
   }
 
-  /** A line or alert as the relay wants it, or null when it isn't sent. */
-  function pack(e) {
+  /** A line or alert as the relay wants it, or null when it isn't sent. question: it's in the hub's Questions list. */
+  function pack(e, question = false) {
     if (!e || !PLATFORMS.includes(e.platform)) return null;
     const alert = ALERT_KINDS.includes(e.kind);
-    const join = e.kind === 'chat' && e.code === 'join'; // TikTok joins: a quiet "joined" line on the panel too
+    const join = e.kind === 'chat' && e.code === 'join'; // TikTok and X joins: a quiet "joined" line on the panel too
     if (!alert && !join && (e.kind !== 'chat' || e.silent === true)) return null;
     const cls = U.classify(e, settings);
     if (cls.hidden) return null;
@@ -62,6 +68,10 @@
       q: e.missed === true || e.historical === true,
       h: cls.highlight || null,
       av: !cls.maskName && /^https:\/\/\S+$/.test(String(u.avatar || '')) ? String(u.avatar).slice(0, 500) : '', // the viewer's picture (not for hidden names)
+      l: cls.maskName ? '' : String(u.login || '').toLowerCase().slice(0, 60), // for the viewer card (none for hidden names)
+      tm: e.ts ? U.fmtTime(e.ts) : '',
+      r: !cls.maskName && Array.isArray(u.roles) ? u.roles.slice(0, 8).map(String) : [],
+      qn: question === true && e.kind === 'chat' && !join,
     };
   }
 
@@ -76,7 +86,75 @@
     }
     const status = tones();
     sentTones = JSON.stringify(status);
-    return { t: 'snap', chat: chat.slice(-40), alerts: alerts.slice(-10), status };
+    return { t: 'snap', chat: chat.slice(-40), alerts: alerts.slice(-10), questions: packList(questions, true), pins: packList(pins), recap: recapNow(), status };
+  }
+  /** The hub's Questions or pins as the relay wants them (quiet; what the filters hide stays out). */
+  const packList = (list, question = false) => list.map(e => pack(e, question)).filter(Boolean).map(m => Object.assign(m, { q: true })).slice(-20);
+
+  // ---------- The Recap tab (the same summary as this page's Recap tab) ----------
+  function recapNow() {
+    let r;
+    try { r = window.UniChatHub.recap(); } catch { return null; }
+    const f = (settings && settings.filters) || {};
+    const blocked = new Set((f.blockedUsers || []).map(x => String(x).toLowerCase().replace(/^@/, '')));
+    // On stream: hidden viewers stay out, and a name the slur filter catches shows as "Someone".
+    r.items = r.items.filter(i => !blocked.has(String(i.login || '').toLowerCase()))
+      .map(i => (f.hideSlurs !== false && U.nameHasSlur(i.name) ? Object.assign({}, i, { name: 'Someone' }) : i));
+    const sum = U.recapSummary(r);
+    return {
+      since: U.fmtTime(sum.start), chips: sum.chips, ns: sum.supporters.length, nf: sum.followers.length, nr: sum.raids.length,
+      supporters: sum.supporters.slice(0, 40).map(x => ({ p: x.platform, n: x.name, what: x.what })),
+      followers: sum.followers.slice(0, 80).map(x => ({ p: x.platform, n: x.name })),
+      raids: sum.raids.slice(0, 20).map(x => ({ p: x.platform, n: x.name, what: x.value ? U.plural(x.value, 'viewer') : '' })),
+    };
+  }
+  function sendRecapSoon() {
+    clearTimeout(recapTimer);
+    recapTimer = setTimeout(() => { const r = recapNow(); if (r) send(Object.assign({ t: 'recap' }, r)); }, 1500);
+  }
+
+  // ---------- Viewer cards for the panel (the same data as this page's viewer card) ----------
+  function answerWho(w) {
+    const p = String(w.p || ''), l = String(w.l || '').toLowerCase();
+    if (!PLATFORMS.includes(p) || !l) return;
+    let data = null;
+    try { data = window.UniChatHub.viewer(p, l); } catch { /* answered with what the chat shows */ }
+    const s = data && data.stats;
+    const seen = history.slice().reverse().find(e => e.platform === p && e.user && String(e.user.login || '').toLowerCase() === l);
+    const user = s ? { name: s.name, login: s.login, avatar: s.avatar, color: s.color, roles: s.roles } : (seen ? seen.user : { name: l, login: l });
+    const reply = { t: 'who', r: w.r, p, l };
+    // A viewer the filters hide (or whose name has a slur) stays hidden on stream too.
+    if (U.classify({ kind: 'chat', platform: p, user, parts: [] }, settings).hidden) {
+      send(Object.assign(reply, { n: 'Hidden viewer', seen: 'Hidden by your filters on the PC', chips: [], recent: [] }));
+      return;
+    }
+    const day = ms => new Date(ms).toLocaleDateString([], { year: 'numeric', month: 'short', day: 'numeric' });
+    const first = data && data.firstSeen
+      ? (data.firstSeenDuringLearning ? `Chatting since at least ${day(data.firstSeen)}` : `First seen ${day(data.firstSeen)}`)
+      : 'Not seen chatting yet';
+    const shown = text => !U.classify({ kind: 'chat', platform: p, user, parts: [{ t: 'text', v: String(text || '') }] }, settings).hidden;
+    const recent = s && Array.isArray(s.recent) ? s.recent.slice().reverse().filter(m => m && shown(m.text)).slice(0, 8)
+      .map(m => ({ t: U.fmtTime(m.ts), x: String(m.text || '').slice(0, 200) })) : [];
+    // Twitch pictures are fetched small for chat; the card shows a bigger copy (as this page's card does).
+    const big = typeof user.avatar === 'string' ? user.avatar.replace(/-70x70\.(png|jpe?g|gif|webp)$/i, '-150x150.$1') : '';
+    send(Object.assign(reply, {
+      n: String(user.name || user.login || l).slice(0, 60), c: hexColor(U.userColor(user, 'dark')),
+      roles: Array.isArray(user.roles) ? user.roles.slice(0, 8).map(String) : [], first: !!(s && s.firstTimeChatter), seen: first,
+      chips: U.supportChips(s && s.totals), recent, av: /^https:\/\/\S+$/.test(big) ? big.slice(0, 500) : '',
+    }));
+  }
+
+  /** The panel's owner hid someone: the same as this page's "Hide this user" (Settings → Filters), with a notice. */
+  async function hideFromPanel(w) {
+    const p = String(w.p || ''), l = String(w.l || '').toLowerCase();
+    if (!PLATFORMS.includes(p) || !/^[a-z0-9_.-]{1,60}$/.test(l)) return;
+    const seen = history.slice().reverse().find(e => e.platform === p && e.user && String(e.user.login || '').toLowerCase() === l);
+    const name = seen && seen.user && seen.user.name ? seen.user.name : l;
+    try {
+      await U.api('POST', '/api/filters/block-user', { login: l });
+      window.UniChatHub.hub.diagnostic(`Resonite: the panel's owner hid ${p}:${l}`);
+      window.dispatchEvent(new CustomEvent('unichat:toast', { detail: `${name} was hidden from Resonite. Undo in Settings → Filters.` }));
+    } catch { /* the filters couldn't be saved; nothing changes */ }
   }
 
   // ---------- New alerts wait until the chat page plays them (see dashboard.js) ----------
@@ -151,6 +229,8 @@
       try { m = JSON.parse(ev.data); } catch { return; }
       const b = m && typeof m === 'object' ? m.bridge : null;
       if (!b || typeof b !== 'object') return;
+      if (b.who && typeof b.who === 'object' && authed) { answerWho(b.who); return; }      // a panel asked for a viewer card
+      if (b.hide && typeof b.hide === 'object' && authed) { hideFromPanel(b.hide); return; } // the panel's owner hid a viewer
       const readers = Math.min(99, Math.max(0, Math.floor(Number(b.readers)) || 0)); // a count, never shown as more than 99
       if (b.state === 'ok') {
         authed = true;
@@ -198,12 +278,15 @@
           if (msg.settings) settings = msg.settings;
           history = (msg.history || []).slice(-300);
           statuses = msg.status || [];
+          questions = (msg.questions || []).slice(-20);
+          pins = (msg.pins || []).slice(-20);
           send(snapshot());
           break;
         case 'event': {
           history.push(msg.event);
           if (history.length > 300) history.shift();
-          const m = pack(msg.event);
+          if (msg.question) { questions.push(msg.event); if (questions.length > 20) questions.shift(); }
+          const m = pack(msg.event, msg.question === true);
           if (!m) break;
           if (ALERT_KINDS.includes(m.k) && !m.q && !played.includes(m.id)) held.set(m.id, { m, timer: setTimeout(() => release(m.id), HOLD_MS) });
           else send({ t: 'ev', e: m });
@@ -213,10 +296,26 @@
         case 'delete': {
           const ids = new Set(msg.ids || []);
           history = history.filter(e => !ids.has(e.id));
+          // Deleted by a moderator: gone from the Questions too. Dismissed here: only out of the chat (lines: true).
+          if (msg.type === 'delete') questions = questions.filter(e => !ids.has(e.id));
           drop(ids);
-          if (ids.size) send({ t: 'rm', ids: [...ids] });
+          if (ids.size) send(Object.assign({ t: 'rm', ids: [...ids] }, msg.type === 'remove' ? { lines: true } : {}));
           break;
         }
+        case 'dismiss': { // ticked alerts and answered questions leave this page's panel after a while
+          const ids = new Set(msg.ids || []);
+          const before = questions.length;
+          questions = questions.filter(e => !ids.has(e.id));
+          if (questions.length !== before) send({ t: 'questions', questions: packList(questions, true) });
+          break;
+        }
+        case 'pins':
+          pins = (msg.pins || []).slice(-20);
+          send({ t: 'pins', pins: packList(pins) });
+          break;
+        case 'recap':
+          sendRecapSoon();
+          break;
         case 'clear': { // a viewer's (or the whole platform's) chat cleared by a moderator
           const login = msg.login ? String(msg.login).toLowerCase() : null;
           const gone = history.filter(e => e.platform === msg.platform && e.kind === 'chat' &&

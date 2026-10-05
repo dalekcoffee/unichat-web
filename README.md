@@ -1,6 +1,6 @@
 # UniChat
 
-Live chat from Twitch, TikTok, Kick, Velora, Blaze and Nimo TV, merged into one read-only page. It runs in your browser, with nothing to install and no logins.
+Live chat from Twitch, TikTok, Kick, Velora, Blaze, Nimo TV and X, merged into one read-only page. It runs in your browser, with nothing to install and no logins.
 
 **Open it: <https://chat.dalek.coffee>**
 

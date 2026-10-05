@@ -19,6 +19,7 @@
   --velora: #ffd700;
   --blaze: #ff7a00;
   --nimo: #7c6dff;
+  --x: #e7e9ea;
   --youtube: #ff0033;
   --system: #8b8fa3;
   --tt-fg: #ffffff;
@@ -40,6 +41,7 @@
   --velora: #b89100;
   --blaze: #e06200;
   --nimo: #5a48e6;
+  --x: #0f1419;
   --try: #d4a000;
   --tt-fg: #111111;
   color-scheme: light;
@@ -232,6 +234,7 @@ body.no-avatars .msg .avatar { display: none; }
 .msg.p-velora { border-left-color: color-mix(in srgb, var(--velora) 70%, transparent); }
 .msg.p-blaze { border-left-color: color-mix(in srgb, var(--blaze) 70%, transparent); }
 .msg.p-nimo { border-left-color: color-mix(in srgb, var(--nimo) 70%, transparent); }
+.msg.p-x { border-left-color: color-mix(in srgb, var(--x) 70%, transparent); }
 .msg.p-youtube { border-left-color: color-mix(in srgb, var(--youtube) 70%, transparent); }
 
 /* Alerts: follow / donation / sub / raid */
@@ -865,7 +868,7 @@ body.settings .check input[type=checkbox]:focus-visible, .switch input[type=chec
 body.settings .sr-controls select, body.settings .test-row select { width: auto; height: 32px; font-size: 13.5px; }
 .sound-line { display: flex; flex-wrap: wrap; align-items: center; gap: 10px 16px; }
 .sound-line > .check { flex: 1 1 260px; }
-.plat-checks { display: flex; gap: 6px; }
+.plat-checks { display: flex; flex-wrap: wrap; gap: 6px; }
 .plat-checks label { display: inline-flex; align-items: center; gap: 4px; cursor: pointer; padding: 3px 6px; border: 1px solid var(--line); border-radius: 8px; }
 .plat-checks svg { width: 15px; height: 15px; }
 .plat-checks input { accent-color: var(--accent); margin: 0; }

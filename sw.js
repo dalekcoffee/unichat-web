@@ -9,7 +9,7 @@ const APP_FILES = [
   'icons/icon-192.png', 'icons/icon-512.png', 'icons/icon-maskable-512.png', 'icons/apple-touch-icon.png',
   'css/style.css',
   'js/common.js', 'js/store.js', 'js/hub.js', 'js/emotes.js', 'js/twitch.js', 'js/tiktok.js', 'js/kick.js',
-  'js/velora.js', 'js/blaze.js', 'js/nimo.js', 'js/dashboard.js', 'js/resonite.js', 'js/settings.js', 'js/overlay.js',
+  'js/velora.js', 'js/blaze.js', 'js/nimo.js', 'js/x.js', 'js/dashboard.js', 'js/resonite.js', 'js/settings.js', 'js/overlay.js',
 ];
 
 self.addEventListener('install', event => {

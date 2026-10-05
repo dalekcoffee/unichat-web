@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
   <meta name="theme-color" content="#17171f">
-  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' https://static-cdn.jtvnw.net https://tiktokcdn.com https://*.tiktokcdn.com https://tiktokcdn-us.com https://*.tiktokcdn-us.com https://tiktokcdn-eu.com https://*.tiktokcdn-eu.com https://ibyteimg.com https://*.ibyteimg.com https://byteimg.com https://*.byteimg.com https://tiktokv.com https://*.tiktokv.com https://muscdn.com https://*.muscdn.com https://eulerstream.com https://*.eulerstream.com https://kick.com https://*.kick.com https://velora.tv https://*.velora.tv https://blaze.stream https://*.blaze.stream https://nimostatic.tv https://*.nimostatic.tv https://nimo.tv https://*.nimo.tv https://cdn.7tv.app https://cdn.betterttv.net https://*.giphy.com https://dalek.coffee; connect-src 'self' wss://unirelay.dalek.coffee https://unirelay.dalek.coffee wss://irc-ws.chat.twitch.tv wss://ws.eulerstream.com wss://ws-us2.pusher.com https://kick.com wss://api.velora.tv wss://blaze.stream https://blaze.stream wss://wsapi.nimo.tv wss://wsapi-global.nimo.tv https://api.ivr.fi https://recent-messages.robotty.de https://7tv.io https://api.betterttv.net; media-src 'self' data: blob:; frame-src https://beamstream.gg; font-src 'self'; object-src 'none'; base-uri 'none'; form-action 'none'">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' https://static-cdn.jtvnw.net https://tiktokcdn.com https://*.tiktokcdn.com https://tiktokcdn-us.com https://*.tiktokcdn-us.com https://tiktokcdn-eu.com https://*.tiktokcdn-eu.com https://ibyteimg.com https://*.ibyteimg.com https://byteimg.com https://*.byteimg.com https://tiktokv.com https://*.tiktokv.com https://muscdn.com https://*.muscdn.com https://eulerstream.com https://*.eulerstream.com https://kick.com https://*.kick.com https://velora.tv https://*.velora.tv https://blaze.stream https://*.blaze.stream https://nimostatic.tv https://*.nimostatic.tv https://nimo.tv https://*.nimo.tv https://pbs.twimg.com https://abs.twimg.com https://cdn.7tv.app https://cdn.betterttv.net https://*.giphy.com https://dalek.coffee; connect-src 'self' wss://unirelay.dalek.coffee https://unirelay.dalek.coffee wss://irc-ws.chat.twitch.tv wss://ws.eulerstream.com wss://ws-us2.pusher.com https://kick.com wss://api.velora.tv wss://blaze.stream https://blaze.stream wss://wsapi.nimo.tv wss://wsapi-global.nimo.tv https://api.ivr.fi https://recent-messages.robotty.de https://7tv.io https://api.betterttv.net; media-src 'self' data: blob:; frame-src https://beamstream.gg; font-src 'self'; object-src 'none'; base-uri 'none'; form-action 'none'">
   <meta name="referrer" content="no-referrer">
   <title>UniChat</title>
   <link rel="icon" href="favicon.ico">
@@ -49,7 +49,7 @@
         <div class="feed" id="feed">
           <div class="empty" id="empty">
             <h2>Waiting for chat…</h2>
-            <p>Messages from Twitch, TikTok, Kick, Velora, Blaze and Nimo TV will appear here.<br>
+            <p>Messages from Twitch, TikTok, Kick, Velora, Blaze, Nimo TV and X will appear here.<br>
               Set your channels in <a href="settings.html" data-keep-config>Settings</a>.</p>
           </div>
         </div>
@@ -87,13 +87,13 @@
         <div><h2 id="aboutTitle">UniChat</h2><span class="about-version" id="aboutVersion"></span></div>
       </div>
       <div class="about-plats" id="aboutPlats"></div>
-      <p><b>One window for all your stream chats.</b> UniChat puts Twitch, TikTok, Kick, Velora, Blaze and Nimo TV chat in one place, together with alerts like subs, gifts, tips and raids.</p>
+      <p><b>One window for all your stream chats.</b> UniChat puts Twitch, TikTok, Kick, Velora, Blaze, Nimo TV and X chat in one place, together with alerts like subs, gifts, tips and raids.</p>
       <p>It's made mainly for <b>streamers</b> keeping an eye on their own chat, and it's <b>read-only</b>: it never posts anything, never asks you to log in to a platform, and runs entirely in your browser.</p>
       <ul class="about-list">
-        <li>Twitch, Kick, Velora, Blaze and Nimo TV only need a channel name.</li>
+        <li>Twitch, Kick, Velora, Blaze, Nimo TV and X only need a channel name.</li>
         <li><b>TikTok needs a free Euler Stream API key</b> (Settings → TikTok), because TikTok doesn't let websites read LIVE chat directly.</li>
         <li>Your settings and key stay in this browser. The links in Settings open the same setup on any other device.</li>
-        <li>Alerts and questions collect in the Alerts panel; tick them off as you go. Click a name to see that viewer. The 🏆 Recap tab lists everyone to thank at the end of the stream.</li>
+        <li>Alerts and questions collect in the Alerts panel; tick them off as you go. Click a name to see that viewer and open their profile. The 🏆 Recap tab lists everyone to thank at the end of the stream.</li>
         <li>Settings open in their own tab, so this page stays connected and keeps its chat while you change things.</li>
       </ul>
       <h3 class="about-sub">Status dots</h3>
@@ -151,6 +151,7 @@
   <script src="js/velora.js"></script>
   <script src="js/blaze.js"></script>
   <script src="js/nimo.js"></script>
+  <script src="js/x.js"></script>
   <script src="js/dashboard.js"></script>
   <script src="js/resonite.js"></script>
 </body>
