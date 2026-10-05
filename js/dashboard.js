@@ -171,6 +171,8 @@
       if (soundOn) U.Sound.forEvent(e, settings, cls);
       maybePopup(e);
       if (player && soundOn) setTimeout(() => player.play(), 900); // after the alert sound
+      // The Resonite panel plays the same line once all of it is ready (resonite.js sends it to the relay).
+      if (player && player.whole) window.dispatchEvent(new CustomEvent('unichat:alert-voice', { detail: { id: e.id, wav: player.whole() } }));
     };
     const giveUp = setTimeout(() => go(null), 120000);
     line.then(p => { clearTimeout(giveUp); go(p); }, () => { clearTimeout(giveUp); go(null); });

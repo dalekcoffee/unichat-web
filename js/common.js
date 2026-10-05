@@ -615,12 +615,14 @@
         if (!job) return;
         if (m.type === 'audio') {
           job.parts.push(URL.createObjectURL(new Blob([m.wav], { type: 'audio/wav' })));
-          if (m.last) job.last = true;
+          job.wavs.push(m.wav);
+          if (m.last) { job.last = true; job.waiters.splice(0).forEach(w => w.done()); }
           if (!job.settled) { job.settled = true; job.resolve(); } // the first sentence is enough to start
           if (job.onPart) job.onPart();
         } else if (m.type === 'error') {
           jobs.delete(m.id);
           if (!job.settled) { job.settled = true; job.reject(new Error(m.message || 'voice failed')); }
+          job.waiters.splice(0).forEach(w => w.fail());
         }
       };
       worker.onerror = () => { for (const [id, job] of jobs) { jobs.delete(id); if (!job.settled) { job.settled = true; job.reject(new Error('voice unavailable')); } } worker = null; ready = false; };
@@ -650,11 +652,54 @@
       const w = voiceWorker();
       if (!w) return Promise.reject(new Error('voice unavailable'));
       const id = ++nextId;
-      const job = { id, parts: [], last: false, settled: false };
+      const job = { id, parts: [], wavs: [], waiters: [], last: false, settled: false };
       const readyP = new Promise((resolve, reject) => { job.resolve = resolve; job.reject = reject; });
       jobs.set(id, job);
       w.postMessage({ type: 'speak', id, text, voice: kokoroId(tts.voice), speed: tts.rate || 1 });
-      return readyP.then(() => ({ play() { playing.push({ job, tts }); playNext(); } }));
+      return readyP.then(() => ({
+        play() { playing.push({ job, tts }); playNext(); },
+        /** The whole line (every sentence) as one 16-bit WAV, for the Resonite panel (see resonite.js). */
+        whole() {
+          return new Promise((resolve, reject) => {
+            const done = () => { try { resolve(wavPcm16(job.wavs)); } catch (err) { reject(err); } };
+            if (job.last) done(); else job.waiters.push({ done, fail: () => reject(new Error('voice failed')) });
+          });
+        },
+      }));
+    }
+
+    /** Joins WAV files (Kokoro's: 32-bit float or 16-bit, mono) into one 16-bit mono WAV, the plainest kind to play elsewhere. */
+    function wavPcm16(files) {
+      let rate = 24000;
+      const chunks = [];
+      for (const buf of files) {
+        const v = new DataView(buf);
+        let pos = 12, fmt = 1, bits = 16, ch = 1;
+        while (pos + 8 <= v.byteLength) {
+          const id = String.fromCharCode(v.getUint8(pos), v.getUint8(pos + 1), v.getUint8(pos + 2), v.getUint8(pos + 3));
+          const size = v.getUint32(pos + 4, true), body = pos + 8;
+          if (id === 'fmt ') { fmt = v.getUint16(body, true); ch = v.getUint16(body + 2, true) || 1; rate = v.getUint32(body + 4, true); bits = v.getUint16(body + 14, true); }
+          else if (id === 'data') {
+            const step = ch * (bits / 8), n = Math.floor(Math.min(size, v.byteLength - body) / step), out = new Int16Array(n);
+            for (let i = 0; i < n; i++) {
+              const at = body + i * step;
+              const x = fmt === 3 && bits === 32 ? v.getFloat32(at, true) : bits === 16 ? v.getInt16(at, true) / 32768 : 0;
+              out[i] = Math.max(-32768, Math.min(32767, Math.round(x * 32767)));
+            }
+            chunks.push(out);
+          }
+          pos = body + size + (size & 1);
+        }
+      }
+      const total = chunks.reduce((n, c) => n + c.length, 0);
+      const out = new ArrayBuffer(44 + total * 2), w = new DataView(out);
+      const tag = (o, t) => { for (let i = 0; i < 4; i++) w.setUint8(o + i, t.charCodeAt(i)); };
+      tag(0, 'RIFF'); w.setUint32(4, 36 + total * 2, true); tag(8, 'WAVE'); tag(12, 'fmt '); w.setUint32(16, 16, true);
+      w.setUint16(20, 1, true); w.setUint16(22, 1, true); w.setUint32(24, rate, true); w.setUint32(28, rate * 2, true);
+      w.setUint16(32, 2, true); w.setUint16(34, 16, true); tag(36, 'data'); w.setUint32(40, total * 2, true);
+      let o = 44;
+      for (const c of chunks) { new Int16Array(out, o, c.length).set(c); o += c.length * 2; }
+      return out;
     }
 
     function speakLocal(text, tts) {
@@ -712,6 +757,6 @@
     return { available: !!synth || typeof Worker === 'function', voices, say, forEvent, prepare, willRead: (e, settings, cls) => !!lineFor(e, settings, cls), warmUp, stop, speaking, KOKORO };
   })();
 
-  const VERSION = '0.0.35';
+  const VERSION = '0.0.36';
   window.UniChat = { VERSION, api, storePin, fmtMoney, icon, esc, safeUrl, safeColor, renderEvent, connect, Sound, Speech, classify, nameHasSlur, plainText, NAMES, PLATFORMS, ALERT_KINDS, KIND_LABEL, KIND_EMOJI, fmtTime, nameHtml, avatarHtml, swapAvatar, partsHtml, shownParts, userColor, statusTone, attemptText, fmtCount, fmtDuration };
 })();

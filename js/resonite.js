@@ -60,6 +60,7 @@
       a: alert ? String(e.amount || '') : '',
       q: e.missed === true || e.historical === true,
       h: cls.highlight || null,
+      av: !cls.maskName && /^https:\/\/\S+$/.test(String(u.avatar || '')) ? String(u.avatar).slice(0, 500) : '', // the viewer's picture (not for hidden names)
     };
   }
 
@@ -88,6 +89,18 @@
   function drop(ids) {
     for (const id of ids) { const h = held.get(id); if (h) { clearTimeout(h.timer); held.delete(id); } }
   }
+  // A finished voice line (see dashboard.js): the relay keeps it briefly and the panel plays it with the alert.
+  window.addEventListener('unichat:alert-voice', ev => {
+    const d = ev.detail || {};
+    if (!d.wav || typeof d.wav.then !== 'function') return;
+    d.wav.then(buf => {
+      if (!buf || buf.byteLength > 900000) return; // about 18 s of voice: longer lines stay on this device
+      const bytes = new Uint8Array(buf);
+      let bin = '';
+      for (let i = 0; i < bytes.length; i += 0x8000) bin += String.fromCharCode.apply(null, bytes.subarray(i, i + 0x8000));
+      send({ t: 'voice', id: String(d.id || '').slice(0, 160), wav: btoa(bin) });
+    }, () => {});
+  });
   window.addEventListener('unichat:alert-go', ev => {
     const id = ev.detail;
     if (held.has(id)) { release(id); return; }
