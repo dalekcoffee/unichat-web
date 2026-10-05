@@ -653,6 +653,9 @@ body.no-avatars .ap-item .avatar { display: none; }
 .btn:hover { border-color: var(--accent); }
 .btn:active { transform: translateY(1px); }
 .btn svg { width: 16px; height: 16px; fill: currentColor; flex: none; }
+/* Settings → Resonite: the panel download, above the switch. */
+.res-get { margin: 0 0 14px; }
+.res-get .help { margin: 6px 0 0; }
 .btn.primary { background: var(--accent); border-color: var(--accent); color: #fff; font-weight: 600; }
 .btn.primary:hover { background: color-mix(in srgb, var(--accent) 85%, #fff); }
 .btn.danger:hover { border-color: var(--err); color: var(--err); }

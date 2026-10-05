@@ -26,8 +26,8 @@
     // (Nimo names aren't unique); it's only used while it belongs to that name. 0 = none picked.
     nimo: { enabled: true, channel: 'dalekcoffee', roomId: 1592342521 },
     // channel: a username, or a broadcast link kept as "i/broadcasts/<id>" (see normalizeX); read through the relay (x.js).
-    // No name by default, so X stays off until one is set.
-    x: { enabled: true, channel: '' },
+    // An empty field falls back to this name, like the other platforms (switch X off to stop it).
+    x: { enabled: true, channel: 'dalekcoffee' },
     alerts: {
       // Settings → Alerts & voice → Volume: turns every sound and the voice up or down together, on top of each one's own
       // volume. 1 = as set (the slider shows 50%), 2 = twice as loud (100%). Separate from the voice's own volume (tts.volume).
