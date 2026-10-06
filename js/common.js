@@ -93,15 +93,17 @@
     const cls = ch => '[' + escapeRegex(LOOKALIKE[ch] || ch).replace(/-/g, '\\-') + ']';
     const PUNCT = `[._*'"\`~,:;=/\\\\|+\\-]`;
     // joined: letters touching (niiigger, n.i.gger); spaced: a gap after every letter (n i g g e r, n-i-g-g-e-r).
+    // A letter repeats at most 30 times (hasSlur shortens longer runs first), so a long crafted message can't make
+    // the check take seconds (with "+" its time grew with the square of the length).
     const build = (pat, spaced) => {
       let out = '', letters = 0;
       for (const ch of pat) {
         if (ch === '<') out += '(?<!\\p{L})';
-        else if (ch === '>') out += `(?:${spaced ? `(?:\\s|${PUNCT}){1,3}` : `${PUNCT}?`}${cls('s')}${spaced ? '' : '+'})?(?!\\p{L})`;
+        else if (ch === '>') out += `(?:${spaced ? `(?:\\s|${PUNCT}){1,3}` : `${PUNCT}?`}${cls('s')}${spaced ? '' : '{1,30}'})?(?!\\p{L})`;
         else if (ch === ' ') out += `(?:\\s|${PUNCT}){0,3}`; // a gap allowed (or none) between two words
         else if (/[a-z]/.test(ch)) {
           if (letters++) out += spaced ? `(?:\\s|${PUNCT}){1,3}` : `${PUNCT}{0,2}`;
-          out += cls(ch) + (spaced ? '' : '+');
+          out += cls(ch) + (spaced ? '' : '{1,30}');
         } else out += ch;
       }
       return out;
@@ -117,7 +119,8 @@
     if (!t) return false;
     const plain = String(t).normalize('NFKD').toLowerCase()
       .replace(/[\p{M}\p{Cf}]/gu, '')                           // accents and hidden characters (zero-width etc.)
-      .replace(/[^\x00-\x7f]/g, ch => FOLD[ch] || ch);
+      .replace(/[^\x00-\x7f]/g, ch => FOLD[ch] || ch)
+      .replace(/([\p{L}\p{N}])\1{3,}/gu, '$1$1$1');             // stretched letters: a run of one letter counts as three
     return slurRegex.test(plain);
   }
   // Names run words together (BigN1gga, x_slur_x), so they're also checked split into words at capitals and underscores.
@@ -205,9 +208,9 @@
     return d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
   }
 
-  /** Only http(s) URLs may become image sources. */
+  /** Only https URLs may become image sources. */
   function safeUrl(u) {
-    return typeof u === 'string' && /^https?:\/\//i.test(u) ? u : '';
+    return typeof u === 'string' && /^https:\/\//i.test(u) ? u : '';
   }
 
   /** Only real CSS hex colours are used in styles (platform data is never trusted as markup). */
@@ -839,7 +842,7 @@
     return { start: r.startedAt, chips, supporters, followers: [...followers.values()], raids };
   }
 
-  const VERSION = '0.0.41';
+  const VERSION = '0.0.42';
   window.UniChat = { VERSION, api, storePin, fmtMoney, icon, esc, safeUrl, safeColor, renderEvent, connect, Sound, Speech, classify, nameHasSlur, plainText, NAMES, PLATFORMS, ALERT_KINDS, KIND_LABEL, KIND_EMOJI, fmtTime, nameHtml, avatarHtml, swapAvatar, partsHtml, shownParts, userColor, statusTone, attemptText, fmtCount, fmtDuration,
     profileUrl, supportChips, recapSummary, plural };
 })();

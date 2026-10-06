@@ -344,6 +344,7 @@
         ws.onerror = () => { /* onclose follows with the details */ };
         ws.onmessage = ev => {
           lastData = Date.now();
+          if (String(ev.data).length > 1000000) return; // far bigger than any real chat
           for (const raw of String(ev.data).split('\r\n')) {
             const m = parseIrc(raw);
             if (!m) continue;

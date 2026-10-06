@@ -306,6 +306,7 @@
 
         ws.onmessage = ev => {
           lastData = Date.now();
+          if (typeof ev.data !== 'string' || ev.data.length > 1000000) return; // Kick sends small JSON texts
           let msg;
           try { msg = JSON.parse(ev.data); } catch { return; }
           if (!msg || typeof msg.event !== 'string') return;

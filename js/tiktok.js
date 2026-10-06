@@ -322,6 +322,7 @@
             if (!warnedBinary) { warnedBinary = true; hub.diagnostic('TikTok: received binary data; only JSON messages are supported'); }
             return;
           }
+          if (ev.data.length > 1000000) return; // far bigger than any real message (the relay drops those too)
           let payload;
           try { payload = JSON.parse(ev.data); } catch { return; }
           if (viaRelay && payload && typeof payload === 'object' && payload.relay && typeof payload.relay === 'object') { relayStatus(payload.relay); return; }

@@ -704,7 +704,7 @@
 
       ws.onmessage = ev => {
         lastData = now();
-        const m = typeof ev.data === 'string' ? ev.data : '';
+        const m = typeof ev.data === 'string' && ev.data.length <= 1000000 ? ev.data : ''; // a bigger text is no chat event
         switch (m[0]) {
           case '0': { // engine open: join the namespace
             try {

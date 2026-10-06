@@ -94,6 +94,7 @@
         ws.onmessage = ev => {
           lastData = Date.now();
           if (typeof ev.data !== 'string') { unknown('(binary data)'); return; }
+          if (ev.data.length > 1000000) return; // far bigger than any real message
           let m;
           try { m = JSON.parse(ev.data); } catch { unknown(ev.data); return; }
           const x = m && typeof m === 'object' ? m.x : null;

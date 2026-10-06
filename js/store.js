@@ -263,6 +263,8 @@
     s.alerts.quietChat.volume = clamp(s.alerts.quietChat.volume, 0, 1, 0.6);
     s.alerts.masterVolume = clamp(s.alerts.masterVolume, 0, 2, 1);
     s.tts.volume = clamp(s.tts.volume, 0, 1.8, 0.9);
+    s.tts.rate = clamp(s.tts.rate, 0.5, 2, 1);
+    s.tts.maxChars = Math.round(clamp(s.tts.maxChars || 200, 20, 500, 200));
     s.tikTok.joinsClearSec = Math.round(clamp(s.tikTok.joinsClearSec, 0, 3600, 15));
     for (const k of KIND_KEYS.map(n => s.alerts.kinds[n])) {
       k.volume = clamp(k.volume, 0, 1, 0.7);
@@ -432,7 +434,13 @@
   /** Settings in effect on this page: defaults ← saved ← URL parameters. */
   function load() {
     const saved = merge(DEFAULTS, readSaved());
-    const s = merge(saved, urlOverrides());
+    const link = urlOverrides();
+    const s = merge(saved, link);
+    // The Euler key saved in this browser only goes with the TikTok name it was saved for: a link naming anyone else uses
+    // only a key it carries itself (in its #s= code), so a link like ?tiktok=someone can't spend this browser's quota.
+    const linkKey = isObj(link.tikTok) && typeof link.tikTok.eulerKey === 'string' && link.tikTok.eulerKey.trim();
+    const sameName = normalizeTikTok(s.tikTok.username).toLowerCase() === normalizeTikTok(saved.tikTok.username).toLowerCase();
+    if (!linkKey && !sameName) s.tikTok.eulerKey = '';
     // Hidden users add up: the list a link carries never un-hides someone hidden in this browser, so "Hide this user"
     // and the Resonite panel's hide also work on pages opened from a link.
     s.filters.blockedUsers = saved.filters.blockedUsers.concat(s.filters.blockedUsers);

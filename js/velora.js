@@ -78,7 +78,8 @@
     const parts = [];
     let buf = '';
     for (const word of text.split(/(\s+)/)) {
-      const m = word ? EDGES.exec(word) : null;
+      // A longer word can't be an emote, and EDGES slows down with the square of a word's length.
+      const m = word && word.length <= 200 ? EDGES.exec(word) : null;
       const url = m && m[2] ? emotes.get(m[2].toLowerCase()) : undefined;
       if (!url) { buf += word; continue; }
       buf += m[1].replace(/:/g, '');

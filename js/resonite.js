@@ -35,6 +35,7 @@
   let questions = [];     // the hub's Questions list (events), and its pins
   let pins = [];
   let recapTimer = null;
+  const shown = new Set(); // "platform:login" of viewers sent to the panel (newest last): the only ones a panel may hide
 
   /** Tell Settings → Resonite (in this browser) and this page's Resonite pill (dashboard.js) how sending is going. */
   function tell(next) {
@@ -60,6 +61,8 @@
     if (cls.hidden) return null;
     const u = e.user || {};
     const name = cls.maskName ? 'Someone' : String(u.name || u.login || '');
+    const login = cls.maskName ? '' : String(u.login || '').toLowerCase().slice(0, 60);
+    if (login) { shown.delete(`${e.platform}:${login}`); shown.add(`${e.platform}:${login}`); if (shown.size > 2000) shown.delete(shown.values().next().value); }
     return {
       id: e.id, k: join ? 'join' : e.kind, p: e.platform, n: name,
       c: name ? hexColor(U.userColor(u, 'dark')) : null,
@@ -69,7 +72,7 @@
       q: e.missed === true || e.historical === true,
       h: cls.highlight || null,
       av: !cls.maskName && /^https:\/\/\S+$/.test(String(u.avatar || '')) ? String(u.avatar).slice(0, 500) : '', // the viewer's picture (not for hidden names)
-      l: cls.maskName ? '' : String(u.login || '').toLowerCase().slice(0, 60), // for the viewer card (none for hidden names)
+      l: login, // for the viewer card (none for hidden names)
       tm: e.ts ? U.fmtTime(e.ts) : '',
       r: !cls.maskName && Array.isArray(u.roles) ? u.roles.slice(0, 8).map(String) : [],
       qn: question === true && e.kind === 'chat' && !join,
@@ -116,8 +119,9 @@
 
   // ---------- Viewer cards for the panel (the same data as this page's viewer card) ----------
   function answerWho(w) {
-    const p = String(w.p || ''), l = String(w.l || '').toLowerCase();
-    if (!PLATFORMS.includes(p) || !l) return;
+    const p = typeof w.p === 'string' ? w.p : '', l = typeof w.l === 'string' ? w.l.toLowerCase() : '';
+    // r is the relay's request number (it counts up from 1), sent back so the answer reaches the panel that asked.
+    if (!PLATFORMS.includes(p) || !/^[a-z0-9_.-]{1,60}$/.test(l) || !Number.isSafeInteger(w.r) || w.r < 1) return;
     let data = null;
     try { data = window.UniChatHub.viewer(p, l); } catch { /* answered with what the chat shows */ }
     const s = data && data.stats;
@@ -145,10 +149,13 @@
     }));
   }
 
-  /** The panel's owner hid someone: the same as this page's "Hide this user" (Settings → Filters), with a notice. */
+  /** The panel's owner hid someone: the same as this page's "Hide this user" (Settings → Filters), with a notice. Anyone
+   *  in the session can read the panel code and connect with it, so only a viewer this page sent to the panel can be
+   *  hidden this way (never the streamer's own channel), not any name a stranger makes up. */
   async function hideFromPanel(w) {
-    const p = String(w.p || ''), l = String(w.l || '').toLowerCase();
-    if (!PLATFORMS.includes(p) || !/^[a-z0-9_.-]{1,60}$/.test(l)) return;
+    const p = typeof w.p === 'string' ? w.p : '', l = typeof w.l === 'string' ? w.l.toLowerCase() : '';
+    if (!PLATFORMS.includes(p) || !/^[a-z0-9_.-]{1,60}$/.test(l) || !shown.has(`${p}:${l}`)) return;
+    if (Store.resonite.channels(settings).includes(`${p}:${l}`)) return;
     const seen = history.slice().reverse().find(e => e.platform === p && e.user && String(e.user.login || '').toLowerCase() === l);
     const name = seen && seen.user && seen.user.name ? seen.user.name : l;
     try {

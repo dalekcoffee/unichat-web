@@ -308,6 +308,9 @@
     $('#linkKeyHelp').classList.toggle('hidden', relay);
     $('#chatLink').value = chat;
     $('#overlayLink').value = overlay;
+    // For a website: the overlay that never fades, never with the key (whatever the box says), on a dark background.
+    const embed = Store.shareUrl(s, 'overlay.html', false, 'fade=0').replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;');
+    $('#embedCode').value = `<iframe src="${embed}" title="Live chat" loading="lazy" style="width:100%;height:600px;border:0;background:#111"></iframe>`;
     $('#chatOpen').href = chat;
     $('#overlayOpen').href = overlay;
     $('#backLink').href = fromLink ? chat : 'index.html';
@@ -331,7 +334,7 @@
     const b = e.target.closest('[data-copy]');
     if (!b) return;
     const input = document.getElementById(b.dataset.copy);
-    const done = () => toast('Link copied. Paste it into a bookmark.');
+    const done = () => toast(b.dataset.copied || 'Link copied. Paste it into a bookmark.');
     if (navigator.clipboard && window.isSecureContext) navigator.clipboard.writeText(input.value).then(done, () => { input.select(); document.execCommand('copy'); done(); });
     else { input.select(); document.execCommand('copy'); done(); }
   });
@@ -369,7 +372,7 @@
 
   // ---------- backup ----------
   const exportKeyBox = $('#exportIncludesKey');
-  exportKeyBox.checked = prefs.get('unichat.web.exportIncludesKey', true);
+  exportKeyBox.checked = prefs.get('unichat.web.exportIncludesKey', false);
   exportKeyBox.addEventListener('change', () => prefs.set('unichat.web.exportIncludesKey', exportKeyBox.checked));
   $('#exportBtn').addEventListener('click', () => {
     const s = collect();
