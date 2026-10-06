@@ -17,7 +17,20 @@
     ts: q.get('ts') === '1',
     system: q.get('system') === '1',
     platforms: q.has('platforms') ? new Set(q.get('platforms').split(',').map(s => s.trim().toLowerCase())) : null,
+    embed: q.get('embed') === '1',
   };
+
+  // On a website (Settings → Copy embed adds embed=1): a quiet note while no message is showing, so a quiet chat doesn't
+  // look broken to visitors (a new visitor has no history). Never in OBS, where it would show on stream.
+  if (opt.embed) {
+    const note = document.createElement('p');
+    note.className = 'embed-note';
+    note.textContent = 'No messages yet. Chat shows up here live as people talk.';
+    document.body.appendChild(note);
+    const update = () => note.classList.toggle('hidden', feed.children.length > 0);
+    new MutationObserver(update).observe(feed, { childList: true });
+    update();
+  }
 
   let settings = null;
 

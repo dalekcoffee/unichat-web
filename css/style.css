@@ -362,6 +362,7 @@ body.overlay .msg {
 body.overlay .msg.alert { background: rgba(40, 32, 70, .75); background: color-mix(in srgb, var(--a) 35%, rgba(10,10,16,.7)); }
 body.overlay .msg .ts { color: rgba(255,255,255,.6); }
 body.overlay .msg.gone { opacity: 0; transform: translateX(-12px); }
+body.overlay .embed-note { position: fixed; left: 0; right: 0; bottom: 0; margin: 0; padding: 14px 16px; text-align: center; color: rgba(255,255,255,.55); font-size: 14px; }
 body.overlay .msg-actions, body.overlay .msg .reply { display: none; }
 body.overlay .name[data-viewer] { cursor: default; text-decoration: none; }
 

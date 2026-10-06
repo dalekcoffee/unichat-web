@@ -309,7 +309,7 @@
     $('#chatLink').value = chat;
     $('#overlayLink').value = overlay;
     // For a website: the overlay that never fades, never with the key (whatever the box says), on a dark background.
-    const embed = Store.shareUrl(s, 'overlay.html', false, 'fade=0').replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;');
+    const embed = Store.shareUrl(s, 'overlay.html', false, 'fade=0&embed=1').replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;');
     $('#embedCode').value = `<iframe src="${embed}" title="Live chat" loading="lazy" style="width:100%;height:600px;border:0;background:#111"></iframe>`;
     $('#chatOpen').href = chat;
     $('#overlayOpen').href = overlay;
