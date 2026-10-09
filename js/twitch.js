@@ -236,9 +236,11 @@
     if (missed) base.missed = true;
 
     switch (msgId) {
-      case 'submysterygift':
-        hub.publish(Object.assign(base, { kind: 'sub', title: stripName(sys, user.name), value: Number(m.tags['msg-param-mass-gift-count']) || 1, unit: 'gifts' }));
+      case 'submysterygift': {
+        const gifts = Number(m.tags['msg-param-mass-gift-count']) || 1;
+        hub.publish(Object.assign(base, { kind: 'sub', title: stripName(sys, user.name), value: gifts, unit: 'gifts', count: gifts })); // count: for the Resonite panel's effects
         break;
+      }
       case 'sub': case 'resub': case 'giftpaidupgrade': case 'anongiftpaidupgrade': case 'primepaidupgrade':
       case 'standardpayforward': case 'communitypayforward':
         hub.publish(Object.assign(base, { kind: 'sub', title: stripName(sys, user.name) }));

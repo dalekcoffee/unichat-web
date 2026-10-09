@@ -167,9 +167,11 @@
         if (card.type === 'points-celebration') {
           const p = obj(card.payload);
           const cost = num(p.cost);
+          const item = str(p.itemName).slice(0, 60);
           hub.publish({ id, platform: 'velora', kind: 'redemption', ts, user: cardUser(p),
-            title: str(p.itemName) ? `redeemed ${str(p.itemName).slice(0, 60)}` : 'redeemed a reward',
-            amount: cost ? `${cost.toLocaleString()} point${cost === 1 ? '' : 's'}` : undefined });
+            title: item ? `redeemed ${item}` : 'redeemed a reward',
+            amount: cost ? `${cost.toLocaleString()} point${cost === 1 ? '' : 's'}` : undefined,
+            gift: item || undefined }); // the reward's own name, for the Resonite panel's effects (resonite.js)
           return;
         }
         if (card.type) report(`card "${str(card.type)}"`, d);

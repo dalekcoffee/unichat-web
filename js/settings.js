@@ -359,10 +359,15 @@
     const test = e.target.closest('[data-test]');
     if (test) {
       if (!channel) { toast("This browser can't send test alerts to other tabs", true); return; }
-      channel.postMessage({ type: 'test', platform: $('#testPlatform').value, kind: test.dataset.test });
+      const gift = test.dataset.gift ? { gift: test.dataset.gift, count: Number(test.dataset.count) || 1 } : {};
+      channel.postMessage(Object.assign({ type: 'test', platform: $('#testPlatform').value, kind: test.dataset.test }, gift));
       toast(connectedTabs ? 'Test alert sent to the open chat page' : 'Sent. Open the chat page in this browser to see it.');
     }
   });
+  // The TikTok gift buttons only show with TikTok picked.
+  const showGifts = () => { $('#testGifts').style.display = $('#testPlatform').value === 'tiktok' ? '' : 'none'; };
+  $('#testPlatform').addEventListener('change', showGifts);
+  showGifts();
   $('#testTts').addEventListener('click', () => {
     if (!U.Speech.available) { toast('This browser has no text-to-speech', true); return; }
     U.Speech.stop();

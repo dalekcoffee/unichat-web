@@ -842,7 +842,7 @@
     return { start: r.startedAt, chips, supporters, followers: [...followers.values()], raids };
   }
 
-  const VERSION = '0.0.43';
+  const VERSION = '0.0.44';
   window.UniChat = { VERSION, api, storePin, fmtMoney, icon, esc, safeUrl, safeColor, renderEvent, connect, Sound, Speech, classify, nameHasSlur, plainText, NAMES, PLATFORMS, ALERT_KINDS, KIND_LABEL, KIND_EMOJI, fmtTime, nameHtml, avatarHtml, swapAvatar, partsHtml, shownParts, userColor, statusTone, attemptText, fmtCount, fmtDuration,
     profileUrl, supportChips, recapSummary, plural };
 })();

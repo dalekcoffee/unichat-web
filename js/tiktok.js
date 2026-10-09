@@ -127,7 +127,8 @@
           const count = Math.max(1, num(pick(d.repeatCount, d.comboCount, d.groupCount)) || 1);
           const diamonds = num(pick(details.diamondCount, d.diamondCount)) || 0;
           const coins = diamonds * count;
-          const name = String(pick(details.giftName, details.name, d.giftName, 'a gift'));
+          const given = pick(details.giftName, details.name, d.giftName); // undefined when TikTok names no gift
+          const name = String(given === undefined ? 'a gift' : given);
           const picture = pick(imageUrl(details.giftImage), imageUrl(details.image), imageUrl(details.icon), d.giftPictureUrl);
           const user = userOf(d, s);
           const announce = () => post({
@@ -135,6 +136,7 @@
             title: count > 1 ? `sent ${name} x${count}` : `sent ${name}`,
             amount: coins > 0 ? `${coins.toLocaleString()} coin${coins === 1 ? '' : 's'}` : undefined,
             value: coins || undefined, unit: 'coins',
+            gift: given === undefined ? undefined : name, count, // for the Resonite panel's effects (resonite.js)
             parts: picture ? [{ t: 'emote', v: name, url: picture }] : [],
             silent: coins < (s.tikTok.minGiftCoinsForSound || 0),
           });

@@ -410,7 +410,8 @@
       const parts = info && info.icon ? [{ t: 'emote', v: name, url: info.icon }] : [];
       if (info && info.diamonds > 0) {
         const total = info.diamonds * count;
-        hub.publish({ platform: 'nimo', kind: 'donation', user, title, amount: `${total.toLocaleString()} diamond${total === 1 ? '' : 's'}`, value: total, unit: 'diamonds', parts });
+        hub.publish({ platform: 'nimo', kind: 'donation', user, title, amount: `${total.toLocaleString()} diamond${total === 1 ? '' : 's'}`, value: total, unit: 'diamonds',
+          gift: info.name || undefined, count, parts }); // gift and count: for the Resonite panel's effects (resonite.js)
       } else {
         // Coin gifts cost nothing real: a quiet line in chat instead of an alert.
         if (!info) report(`gift ${id}`, m);

@@ -358,6 +358,8 @@
       });
     if (e.title != null) e.title = tidy(e.title, 200);
     if (e.amount != null) e.amount = tidy(e.amount, 60);
+    if (e.gift != null) e.gift = tidy(e.gift, 60);  // the gift's or reward's name and how many (the Resonite panel's effects)
+    if (e.count !== undefined) e.count = Math.min(99999, Math.max(1, Math.floor(Number(e.count)) || 1));
     if (e.reply && typeof e.reply === 'object') { e.reply.name = tidy(e.reply.name, 60); e.reply.text = tidy(e.reply.text, 300); }
     return e;
   }
@@ -1135,24 +1137,31 @@
 
   // ---------- Talk to the Settings page in this browser (status, test alerts) ----------
   const NAMES = ['TestViewer', 'CozyGamer42', 'NightOwl', 'PixelPanda', 'SirChatsALot'];
-  function testEvent(platform, kind) {
+  // Settings' TikTok gift buttons: each gift's price in coins (roughly what TikTok charges).
+  const TIKTOK_GIFTS = { 'Rose': 1, 'Finger Heart': 5, 'Money Gun': 500, 'Galaxy': 1000, 'Lion': 29999 };
+  function testEvent(platform, kind, gift, count) {
     const name = NAMES[Math.floor(Math.random() * NAMES.length)];
     const LABELS = { twitch: 'Twitch', tiktok: 'TikTok', kick: 'Kick', velora: 'Velora', blaze: 'Blaze', nimo: 'Nimo TV', x: 'X' };
     const p = Object.prototype.hasOwnProperty.call(LABELS, platform) ? platform : 'twitch';
     const e = { platform: p, kind, code: 'test', user: { name, login: name.toLowerCase(), roles: [] }, parts: [] };
     const DONATIONS = {
       twitch: { title: 'cheered 500 bits', amount: '500 bits', value: 500, unit: 'bits' },
-      tiktok: { title: 'sent Rose x5', amount: '5 coins', value: 5, unit: 'coins' },
+      tiktok: { title: 'sent Rose x5', amount: '5 coins', value: 5, unit: 'coins', gift: 'Rose', count: 5 },
       kick: { title: 'sent KICKs', amount: '100 KICKs', value: 100, unit: 'KICKs' },
       blaze: { title: 'sent a tip', amount: '320K' },
-      velora: { kind: 'redemption', title: 'redeemed Hydrate', amount: '100 points' }, // Velora tips need a login; redemptions show in chat
-      nimo: { title: 'sent Duck Rain Coat x2', amount: '598 diamonds', value: 598, unit: 'diamonds' },
+      velora: { kind: 'redemption', title: 'redeemed Hydrate', amount: '100 points', gift: 'Hydrate' }, // Velora tips need a login; redemptions show in chat
+      nimo: { title: 'sent Duck Rain Coat x2', amount: '598 diamonds', value: 598, unit: 'diamonds', gift: 'Duck Rain Coat', count: 2 },
       x: { title: 'sent a tip', amount: '$5.00' }, // X chat carries no tips; this just shows how an alert looks
     };
     switch (kind) {
       case 'follow': e.title = 'followed'; break;
       case 'donation':
         Object.assign(e, DONATIONS[p]);
+        if (p === 'tiktok' && Object.prototype.hasOwnProperty.call(TIKTOK_GIFTS, gift)) { // a gift button: sent like a real combo
+          const n = Math.min(99, Math.max(1, Math.floor(Number(count)) || 1)), coins = TIKTOK_GIFTS[gift] * n;
+          Object.assign(e, { title: n > 1 ? `sent ${gift} x${n}` : `sent ${gift}`, amount: `${coins.toLocaleString()} coin${coins === 1 ? '' : 's'}`,
+            value: coins, gift, count: n });
+        }
         e.parts = [{ t: 'text', v: 'This is a test donation, keep it up!' }];
         break;
       case 'sub': e.title = 'subscribed for 3 months'; e.parts = [{ t: 'text', v: 'Test sub message' }]; break;
@@ -1164,7 +1173,7 @@
   if (channel) {
     channel.addEventListener('message', ev => {
       const m = ev.data || {};
-      if (m.type === 'test') hub.publish(testEvent(m.platform, m.kind));
+      if (m.type === 'test') hub.publish(testEvent(m.platform, m.kind, m.gift, m.count));
       else if (m.type === 'hello?' && started) channel.postMessage({ type: 'status', status: statusList() });
     });
   }

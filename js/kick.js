@@ -95,6 +95,7 @@
         title: gift.name ? `sent ${gift.name}` : 'sent KICKs',
         amount: amount > 0 ? `${amount.toLocaleString()} KICK${amount === 1 ? '' : 's'}` : undefined,
         value: amount || undefined, unit: 'KICKs',
+        gift: gift.name ? String(gift.name) : undefined, // for the Resonite panel's effects (resonite.js)
         parts: d.message ? buildParts(d.message) : [],
       });
     }
@@ -143,7 +144,7 @@
           const count = Math.max(1, Math.floor(Array.isArray(d.gifted_usernames) ? d.gifted_usernames.length : num(d.quantity) || 1));
           const who = d.gifter_username || d.username;
           if (hub.isDuplicate(`kick-gifts:${slugOf(who)}:${count}`, 15000)) break;
-          hub.publish({ platform: 'kick', kind: 'sub', user: namedUser(who, null, 'Anonymous'), title: `gifted ${count} sub${count === 1 ? '' : 's'}`, value: count, unit: 'gifts' });
+          hub.publish({ platform: 'kick', kind: 'sub', user: namedUser(who, null, 'Anonymous'), title: `gifted ${count} sub${count === 1 ? '' : 's'}`, value: count, unit: 'gifts', count });
           break;
         }
         case 'FollowersUpdated':

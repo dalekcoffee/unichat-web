@@ -8,7 +8,7 @@
    page sends, someone else's page is told the room is in use.
    v4 panels also show this page's Questions, Pinned and Recap, and can ask for a viewer card (answered from this page's
    viewer data, filters applied) or, for the panel's owner, hide a viewer (added to Settings → Filters, with a notice
-   here so it can be undone). */
+   here so it can be undone). v5 panels also spawn items for a new alert (its gift or reward and how many go with it). */
 (function () {
   'use strict';
   const U = window.UniChat;
@@ -51,6 +51,11 @@
     return m ? '#' + m.slice(1, 4).map(n => Math.min(255, Number(n)).toString(16).padStart(2, '0')).join('') : null;
   }
 
+  // The panel's effects (it spawns items for an alert): a gift's or reward's name as the key of its item, letters and digits
+  // only ("Money Gun" → "MoneyGun", "Rosé" → "Rose"; '' for none), and how many to spawn (1 to 50).
+  const effectKey = name => String(name || '').normalize('NFKD').replace(/\p{M}+/gu, '').replace(/[^A-Za-z0-9]/g, '').slice(0, 32);
+  const effectCount = n => Math.min(50, Math.max(1, Math.floor(Number(n)) || 1));
+
   /** A line or alert as the relay wants it, or null when it isn't sent. question: it's in the hub's Questions list. */
   function pack(e, question = false) {
     if (!e || !PLATFORMS.includes(e.platform)) return null;
@@ -69,6 +74,8 @@
       x: join ? '' : (U.shownParts(e, cls) || []).map(p => (p && p.v != null ? String(p.v) : '')).join('').trim(),
       ti: alert ? String(e.title || '') : '',
       a: alert ? String(e.amount || '') : '',
+      g: alert ? effectKey(e.gift) : '',
+      gn: alert ? effectCount(e.count) : '',
       q: e.missed === true || e.historical === true,
       h: cls.highlight || null,
       av: !cls.maskName && /^https:\/\/\S+$/.test(String(u.avatar || '')) ? String(u.avatar).slice(0, 500) : '', // the viewer's picture (not for hidden names)
