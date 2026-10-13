@@ -96,6 +96,32 @@
   const streaks = new Map(); // sender + gift (+ TikTok's combo ID) → { timer, announced }
   let giftSampled = false;
 
+  // Likes (and shares) from one viewer build up on a single line: each update takes the old line out and adds the new
+  // total at the bottom, at most every TALLY_UPDATE_MS, so the last update shows the final count. TikTok gives likes no
+  // run ID, so a pause of TALLY_GAP_MS starts a new count.
+  const TALLY_UPDATE_MS = 3000;
+  const TALLY_GAP_MS = 10000;
+  const tallies = new Map(); // kind + viewer → { total, line, id, last, timer, gap }
+
+  /** Adds to a viewer's running count; line(total) builds the event shown for it. */
+  function tally(key, add, line) {
+    let t = tallies.get(key);
+    if (!t) tallies.set(key, t = { total: 0, id: '', last: 0, timer: 0, gap: 0 });
+    t.total += add;
+    t.line = line;
+    const show = () => {
+      t.timer = 0;
+      if (t.id) hub.removeLines([t.id]);
+      const e = t.line(t.total);
+      hub.publish(e);
+      t.id = e.id;
+      t.last = Date.now();
+    };
+    if (!t.timer) t.timer = setTimeout(show, Math.max(0, t.last + TALLY_UPDATE_MS - Date.now()));
+    clearTimeout(t.gap);
+    t.gap = setTimeout(() => { if (tallies.get(key) === t && !t.timer) tallies.delete(key); }, TALLY_GAP_MS);
+  }
+
   function makeHandler(settings, ctx) {
     const seenKinds = new Set();
     let lastViewers = 0;
@@ -107,6 +133,12 @@
       const s = settings;
       const msgId = messageId(d);
       const post = e => hub.publish(Object.assign({ id: msgId, ts: sentAt(d), platform: 'tiktok' }, e));
+      // A running count's line gets a new ID each update; TikTok's own ID still skips a like resent after a reconnect.
+      const addUp = (what, add, title) => {
+        if (msgId && hub.isDuplicate(msgId, 600000)) return;
+        const user = userOf(d, s), ts = sentAt(d);
+        tally(`${what}|${user.login}`, add, total => ({ ts, platform: 'tiktok', kind: 'chat', user, title: title(total), silent: true }));
+      };
 
       switch (kind) {
         case 'chat':
@@ -173,7 +205,7 @@
             if (hub.isDuplicate(`tiktok-follow:${user.login}`, 600000)) break;
             post({ kind: 'follow', user, title: 'followed' });
           } else if (isShare && s.tikTok.showShares) {
-            post({ kind: 'chat', user, title: 'shared the LIVE', silent: true });
+            addUp('share', 1, n => (n > 1 ? `shared the LIVE x${n}` : 'shared the LIVE'));
           }
           break;
         }
@@ -185,7 +217,7 @@
 
         case 'like':
           markLive();
-          if (s.tikTok.showLikes) post({ kind: 'chat', user: userOf(d, s), title: `liked the LIVE x${num(d.likeCount) || 1}`, silent: true });
+          if (s.tikTok.showLikes) addUp('like', num(d.likeCount) || 1, n => `liked the LIVE x${n.toLocaleString()}`);
           break;
 
         case 'member': { // someone joined: a quiet line when Settings → TikTok → "Show joins" is on, never an alert
