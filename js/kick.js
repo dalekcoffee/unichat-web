@@ -6,8 +6,10 @@
   'use strict';
   const { hub, ConnectorError, registerConnector, avatarLookup, watchResume } = window.UniChatHub;
 
-  // Kick's public Pusher app key (the one kick.com's own chat page uses). If Kick ever changes it, update it here.
-  const PUSHER_URL = 'wss://ws-us2.pusher.com/app/32cbd69e4b950bf97679?protocol=7&client=js&version=8.4.0&flash=false';
+  // Kick's public Pusher app (the one kick.com's own chat page uses). Kick rotates the key now and then (it did on
+  // 2026-10-18: the old one answered close code 4001); kick.com's own chat page asks https://web.kick.com/api/v1/realtime/channels/<id>/chat/connection
+  // for it, but that only allows kick.com as an origin, so a new key has to be put here. Tell-tale: "refused the connection (4001…)".
+  const PUSHER_URL = 'wss://ws-us2.pusher.com/app/34bf7a0ff419a2a775b9?protocol=7&client=js&version=8.4.0&flash=false';
   const CHANNEL_API = slug => `https://kick.com/api/v2/channels/${encodeURIComponent(slug)}`;
   const EMOTE = /\[emote:(\d+):([^\]]*)\]/g;
   const IDS_KEY = 'unichat.web.kickIds';
