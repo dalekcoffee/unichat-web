@@ -108,8 +108,11 @@
 
   // ---------- Live status ----------
   // Anonymous chat doesn't say whether the channel is live, so the same IVR API is asked about the one channel being
-  // read, every 90 seconds while connected. Its "stream" is null when offline.
-  const LIVE_CHECK_MS = 90000;
+  // read, every 90 seconds while connected. Its "stream" is null when offline. Twitch's own data can lag 1–3 minutes
+  // behind going live, so hints that you just went live switch to asking every 30 seconds: another platform going live
+  // (for QUICK_FOR_MS), or chat or alerts arriving while it still says offline (for the next check). Once live, a single
+  // "offline" answer is asked again 30 seconds later before saying the stream ended (one lagging answer isn't enough).
+  const LIVE_CHECK_MS = 90000, QUICK_CHECK_MS = 30000, QUICK_FOR_MS = 5 * 60000;
   async function checkLive(channel, signal) {
     const res = await fetch('https://api.ivr.fi/v2/twitch/user?login=' + encodeURIComponent(channel), { credentials: 'omit', signal });
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
@@ -308,25 +311,55 @@
         const liveAbort = new AbortController();
         let liveTimer = null;
         let liveReported = false;
+        let liveNow = null;      // what the last answer said (null: no answer yet)
+        let lastCheck = 0;       // when the last check started (0: not yet, checks start once the channel is joined)
+        let dueAt = Infinity;    // when the next check is due
+        let checking = false;
+        let quickUntil = 0;      // asking every QUICK_CHECK_MS until then, while not live
+        let offlineOnce = false; // live, then one "offline" answer: asked again before believing it
+        function checkAt(t) {
+          clearTimeout(liveTimer);
+          dueAt = t;
+          liveTimer = setTimeout(updateLive, Math.max(0, t - Date.now()));
+        }
         async function updateLive() {
+          checking = true;
+          lastCheck = Date.now();
+          dueAt = Infinity;
           try {
             const r = await checkLive(channel, liveAbort.signal);
             if (finished || !r) return;
+            if (liveNow === true && !r.live && !offlineOnce) { offlineOnce = true; return; }
+            offlineOnce = false;
+            liveNow = r.live;
             ctx.setLive(r.live);
             if (r.live) ctx.stats({ viewers: r.viewers, since: r.since });
           } catch (err) {
             if (finished || liveReported) return;
             liveReported = true; // once per connection; the status dot shows "can't tell" meanwhile
             hub.diagnostic(`Twitch: couldn't check whether #${channel} is live (${err.message})`);
+          } finally {
+            checking = false;
+            const quick = offlineOnce || (liveNow !== true && Date.now() < quickUntil);
+            if (!finished) checkAt(lastCheck + (quick ? QUICK_CHECK_MS : LIVE_CHECK_MS));
           }
         }
+        /** A hint that you may have just gone live: check within QUICK_CHECK_MS of the last check, and keep checking
+            that often for forMs (0: just this once). */
+        function checkSoon(forMs) {
+          if (finished || liveNow === true) return;
+          quickUntil = Math.max(quickUntil, Date.now() + forMs);
+          const at = lastCheck + QUICK_CHECK_MS;
+          if (lastCheck && !checking && at < dueAt) checkAt(at); // otherwise the running (or first) check picks the pace
+        }
+        ctx.onLiveElsewhere(() => checkSoon(QUICK_FOR_MS));
 
         function finish(err) {
           if (finished) return;
           finished = true;
           clearTimeout(joinTimer);
           clearInterval(pingTimer);
-          clearInterval(liveTimer);
+          clearTimeout(liveTimer);
           liveAbort.abort();
           try { ws.close(); } catch { /* already closed */ }
           if (err) reject(err); else resolve();
@@ -360,7 +393,6 @@
                     clearTimeout(joinTimer);
                     ctx.connected(`#${channel}`);
                     updateLive();
-                    liveTimer = setInterval(updateLive, LIVE_CHECK_MS);
                     if (s.twitch.catchUp) {
                       // While the missed chat loads (5 s at most), new lines wait, so everything shows in order.
                       const since = catchUpSince(channel);
@@ -388,6 +420,7 @@
                   }
                   break;
                 case 'PRIVMSG': case 'USERNOTICE': case 'CLEARCHAT': case 'CLEARMSG':
+                  checkSoon(0); // chat while it says offline: maybe the stream just started
                   if (held) held.push(m); else handle(m); // held while missed chat is filled in (see catchUp)
                   break;
               }

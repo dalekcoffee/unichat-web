@@ -920,6 +920,7 @@
       awayTries: 0,        // quiet retries while a phone has the page in the background
       stoppedAway: false,  // it ran out of tries while the page was hidden: coming back tries again
       resumeCheck: null,   // the running connection's "still there?" check (ctx.onResume)
+      liveElsewhere: null, // the running connection's "another platform just went live" hint (ctx.onLiveElsewhere)
       waitForTurn: true,   // the next try lets Twitch and TikTok connect first (see waitTurn)
       status: { state: 'disabled', detail: '', attempt: 0, nextRetryAt: null },
 
@@ -968,6 +969,8 @@
             parts: [{ t: 'text', v: live ? `🔴 ${def.label}: you're live!` : `⚫ ${def.label}: stream ended.` }] });
         }
         this.setStatus(this.status.state, this.status.detail, this.status.attempt, this.status.nextRetryAt);
+        // Streams usually start on every platform at once: the ones that have to keep asking (Twitch) ask sooner.
+        if (live === true) connectors.forEach(o => { if (o !== this && o.liveElsewhere) o.liveElsewhere(def.platform); });
       },
 
       healthy(stateName, detail) {
@@ -1048,6 +1051,8 @@
             stats: current(s => this.stats(s)),
             /** fn() runs when the page comes back from the background, to check the connection still works. */
             onResume: current(fn => { this.resumeCheck = () => { if (!tryAc.signal.aborted) fn(); }; }),
+            /** fn(platform) runs when another platform says you've gone live (e.g. to check this one's live status sooner). */
+            onLiveElsewhere: current(fn => { this.liveElsewhere = p => { if (!tryAc.signal.aborted) fn(p); }; }),
           };
 
           let reason = 'Connection closed';
@@ -1060,6 +1065,7 @@
           } finally {
             clearTimeout(timeout);
             this.resumeCheck = null;
+            this.liveElsewhere = null;
           }
           if (ac.signal.aborted) { attempt = 0; continue; } // settings changed or restart requested
           if (timedOut) { err = null; reason = `No answer within ${CONNECT_TIMEOUT_MS / 1000} seconds`; }
