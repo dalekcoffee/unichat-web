@@ -12,7 +12,7 @@
     OBS browser source / website embed. Channels come from the link (?twitch=…&tiktok=…) or this browser's settings.
     Optional URL parameters:
       ?fade=30        seconds before a message fades out (0 = never; default comes from Settings)
-      &size=20        font size in px
+      &size=20        font size in px (before fit scaling)
       &max=30         messages kept on screen
       &chat=0         hide normal chat (alerts only)
       &alerts=0       hide follow/donation/sub/raid alerts
@@ -20,9 +20,19 @@
       &sound=1        play alert sounds through OBS (off by default)
       &ts=1           show timestamps
       &system=1       show connection messages (off by default so viewers never see them)
-      &fit=1          text scales with the source size (landscape and vertical scenes)
+      &layout=vertical   landscape (default) or vertical presets
+      &width=420px    how wide the chat is (px or %)
+      &bubble=fit     fit (bubbles only as wide as their text; default) or full (always the full width)
+      &align=left     left, center or right
+      &order=top      top (new on top, going down; default) or bottom
+      &fit=1          text and bubbles scale with the source size (landscape and vertical scenes)
       &pad=5%,12%,20%,5%   space kept clear: top,right,bottom,left (or one value), px or %
-      &embed=1      on a website: a note while no message is showing (Settings → Copy embed adds it)
+      &opacity=55     bubble background 0-100
+      &padx=8 &pady=4 &radius=8 &gap=3   bubble padding, corner roundness and spacing in px
+      &outline=1      dark outline around the text, readable on any background
+      &mask=0         no soft fade at the bottom edge of the chat
+      &demo=1         sample messages only, no connections (the Settings preview)
+      &embed=1    on a website: a note while no message is showing (Settings → Copy embed adds it)
   -->
   <div class="feed" id="feed"></div>
   <script src="js/common.js"></script>

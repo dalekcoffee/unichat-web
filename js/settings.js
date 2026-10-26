@@ -298,20 +298,109 @@
   keyBox.checked = prefs.get('unichat.web.linkIncludesKey', false);
   keyBox.addEventListener('change', () => { prefs.set('unichat.web.linkIncludesKey', keyBox.checked); updateLinks(); });
 
-  // Overlay layout fields: remembered in this browser, added to both overlay links when filled in.
-  const ovFields = { width: '#ovWidth', align: '#ovAlign', order: '#ovOrder', fade: '#ovFade', size: '#ovSize', pad: '#ovPad' };
+  // Overlay look fields: one set per layout (landscape, vertical), remembered in this browser. The boxes show the layout
+  // picked above them; each overlay link only gets its own layout's filled-in values.
+  const ovFields = { width: '#ovWidth', bubble: '#ovBubble', align: '#ovAlign', order: '#ovOrder', fade: '#ovFade', size: '#ovSize', pad: '#ovPad', opacity: '#ovOpacity', padx: '#ovPadx', pady: '#ovPady', radius: '#ovRadius', gap: '#ovGap', outline: '#ovOutline' };
+  const OV_LAYOUTS = ['landscape', 'vertical'];
+  const OV_HINTS = { width: 'Use a number with px or %, like 420px or 80%. Not used until it is fixed.', pad: 'Use one value or four (top,right,bottom,left), each with px or %, like 5%,10%,20%,5%. Not used until it is fixed.' };
+  // What each layout does when a box is empty (shown as the box's grey example).
+  const OV_DEFAULTS = { landscape: { width: '420px', pad: '10px' }, vertical: { width: '100%', pad: '6%,8%,24%,6%' } };
+  const ovKey = (layout, name) => `unichat.web.ov.${layout}.${name}`;
+  // The first version had one set of boxes for both links: those values become the landscape set, once.
+  if (!prefs.get('unichat.web.ov.split', false)) {
+    Object.keys(ovFields).forEach(name => {
+      const old = prefs.get('unichat.web.ov.' + name, null);
+      if (old !== null && prefs.get(ovKey('landscape', name), null) === null) prefs.set(ovKey('landscape', name), old);
+      try { localStorage.removeItem('unichat.web.ov.' + name); } catch { /* blocked: the old key is ignored anyway */ }
+    });
+    prefs.set('unichat.web.ov.split', true);
+  }
+  const ovValues = {};
+  OV_LAYOUTS.forEach(l => { ovValues[l] = {}; Object.keys(ovFields).forEach(name => { ovValues[l][name] = String(prefs.get(ovKey(l, name), '')); }); });
+  let ovLayout = prefs.get('unichat.web.ov.layout', 'landscape') === 'vertical' ? 'vertical' : 'landscape';
+  const ovRead = el => (el.type === 'checkbox' ? (el.checked ? '1' : '') : el.value.trim());
+  const ovValid = (name, v) => v === '' || (name === 'width' ? U.parseWidth(v) !== null : name === 'pad' ? U.parsePad(v) !== null : true);
+
+  /** Shows a layout's saved values in the boxes (and its examples), and flags a width or padding that can't be used. The box being typed in is left alone. */
+  function showOvFields(editing) {
+    Object.entries(ovFields).forEach(([name, sel]) => {
+      const el = $(sel), v = ovValues[ovLayout][name];
+      if (el === editing) { /* keep what is being typed */ } else if (el.type === 'checkbox') el.checked = v === '1'; else el.value = v;
+      if (OV_DEFAULTS[ovLayout][name]) el.placeholder = OV_DEFAULTS[ovLayout][name];
+      if (OV_HINTS[name]) {
+        const bad = !ovValid(name, v);
+        el.setAttribute('aria-invalid', String(bad));
+        const hint = $(sel + 'Hint');
+        hint.textContent = bad ? OV_HINTS[name] : '';
+        hint.classList.toggle('hidden', !bad);
+      }
+    });
+    $$('[data-ov-layout]').forEach(b => b.setAttribute('aria-pressed', String(b.dataset.ovLayout === ovLayout)));
+  }
   Object.entries(ovFields).forEach(([name, sel]) => {
     const el = $(sel);
-    el.value = prefs.get('unichat.web.ov.' + name, '');
-    const onChange = () => { prefs.set('unichat.web.ov.' + name, el.value); updateLinks(); };
+    const onChange = () => {
+      ovValues[ovLayout][name] = ovRead(el);
+      prefs.set(ovKey(ovLayout, name), ovValues[ovLayout][name]);
+      showOvFields(el);
+      updateLinks();
+    };
     el.addEventListener('input', onChange);
     el.addEventListener('change', onChange);
   });
-  function overlayQuery(layout) {
+  $$('[data-ov-layout]').forEach(b => b.addEventListener('click', () => {
+    ovLayout = b.dataset.ovLayout;
+    prefs.set('unichat.web.ov.layout', ovLayout);
+    showOvFields();
+    updateLinks();
+  }));
+  $('#ovReset').addEventListener('click', () => {
+    Object.keys(ovFields).forEach(name => { ovValues[ovLayout][name] = ''; prefs.set(ovKey(ovLayout, name), ''); });
+    showOvFields();
+    updateLinks();
+    toast(`The ${ovLayout} look is back to its defaults.`);
+  });
+  /** The link options for one layout: its own filled-in boxes only (a width or padding that can't be used is left out). */
+  function overlayQuery(layout, extra) {
     const q = new URLSearchParams({ layout });
-    Object.entries(ovFields).forEach(([name, sel]) => { const v = $(sel).value.trim(); if (v !== '') q.set(name, v); });
+    Object.keys(ovFields).forEach(name => { const v = ovValues[layout][name]; if (v !== '' && ovValid(name, v)) q.set(name, v); });
+    if (extra) new URLSearchParams(extra).forEach((v, k) => q.set(k, v));
     return q.toString();
   }
+
+  // Live preview: the overlay itself in a frame, in demo mode (sample messages, no connections, no channels or key in its
+  // address), drawn at a real scene size and scaled down so widths and text read the way they will on stream.
+  const SCENES = { landscape: [1280, 720], vertical: [720, 1280] };
+  const stage = $('#ovStage'), frame = $('#ovPreview'), look = $('#ovLook');
+  let previewSrc = '', previewTimer = 0;
+  function fitPreview() {
+    const [w, h] = SCENES[ovLayout];
+    const room = Math.min(stage.parentElement.clientWidth, ovLayout === 'vertical' ? 300 : 640);
+    if (!room) return; // the section is closed
+    const scale = room / w;
+    stage.style.width = room + 'px';
+    stage.style.height = Math.round(h * scale) + 'px';
+    frame.style.width = w + 'px';
+    frame.style.height = h + 'px';
+    frame.style.transform = `scale(${scale})`;
+    $('#ovPreviewTitle').textContent = `Preview · ${ovLayout} scene, ${w}×${h}`;
+  }
+  function showPreview() {
+    fitPreview();
+    if (!look.open) return;
+    const src = 'overlay.html?' + overlayQuery(ovLayout, 'demo=1');
+    if (src !== previewSrc) { previewSrc = src; frame.src = src; }
+  }
+  function queuePreview() { clearTimeout(previewTimer); previewTimer = setTimeout(showPreview, 350); }
+  look.addEventListener('toggle', showPreview);
+  window.addEventListener('resize', fitPreview);
+  const ovBg = prefs.get('unichat.web.ov.previewBg', 'checker');
+  const setBg = bg => {
+    stage.dataset.bg = ['checker', 'dark', 'light'].includes(bg) ? bg : 'checker';
+    $$('[data-ov-bg]').forEach(b => b.setAttribute('aria-pressed', String(b.dataset.ovBg === stage.dataset.bg)));
+  };
+  setBg(ovBg);
+  $$('[data-ov-bg]').forEach(b => b.addEventListener('click', () => { setBg(b.dataset.ovBg); prefs.set('unichat.web.ov.previewBg', stage.dataset.bg); }));
 
   function updateLinks() {
     const s = collect();
@@ -333,6 +422,8 @@
     $('#overlayOpen').href = overlay;
     $('#backLink').href = fromLink ? chat : 'index.html';
     $('#brandLink').href = $('#backLink').href;
+    fitPreview();
+    queuePreview();
   }
 
   // The chat page opens Settings in its own tab, so the chat keeps running. "Back to chat" then returns to that tab
@@ -660,5 +751,6 @@
   }
 
   applyMode(prefs.get('unichat.web.settingsAll', false) === true);
+  showOvFields();
   render();
 })();

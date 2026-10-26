@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
   <meta name="theme-color" content="#17171f">
-  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: https://nimostatic.tv https://*.nimostatic.tv https://nimo.tv https://*.nimo.tv; connect-src 'self' wss://wsapi.nimo.tv wss://wsapi-global.nimo.tv; media-src 'self' data: blob:; font-src 'self'; object-src 'none'; base-uri 'none'; form-action 'none'">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: https://nimostatic.tv https://*.nimostatic.tv https://nimo.tv https://*.nimo.tv; connect-src 'self' wss://wsapi.nimo.tv wss://wsapi-global.nimo.tv; media-src 'self' data: blob:; font-src 'self'; frame-src 'self'; object-src 'none'; base-uri 'none'; form-action 'none'">
   <meta name="referrer" content="no-referrer">
   <title>UniChat settings</title>
   <link rel="icon" href="favicon.ico">
@@ -56,16 +56,41 @@
       </div>
       <label class="check" id="linkKeyRow"><input type="checkbox" id="linkIncludesKey"> Include my TikTok (Euler) key in these links</label>
       <p class="help" id="linkKeyHelp">Leave this off for links you share or embed on a website: anyone with the key can use your free Euler quota. Turn it on for your own bookmarks on other devices. Everything after the <code>#</code> stays in the browser and is never sent to the website hosting UniChat.</p>
-      <details class="adv">
-        <summary>Overlay layout</summary>
-        <p class="help">Use the landscape link in wide scenes and the vertical link in vertical ones (one OBS Browser source per scene). These fields change both overlay links; leave one empty to keep its default.</p>
+      <details class="ov-look" id="ovLook" open>
+        <summary>Overlay look: width, bubbles, fade, side</summary>
+        <p class="help keep">Use the landscape link in wide scenes and the vertical link in vertical ones (one OBS Browser source per scene). Each keeps its own look: pick which one to change, and leave a box empty to keep its default. The preview below uses sample messages only.</p>
+        <div class="ov-bar">
+          <div class="ov-seg" role="group" aria-label="Which overlay to change">
+            <button class="btn small" type="button" data-ov-layout="landscape" aria-pressed="true">Landscape</button>
+            <button class="btn small" type="button" data-ov-layout="vertical" aria-pressed="false">Vertical</button>
+          </div>
+          <button class="btn small" type="button" id="ovReset">Reset layout</button>
+        </div>
         <div class="grid">
-          <label class="field"><span>Width <em>e.g. 420px or 80% · default 420px landscape, 100% vertical</em></span><input type="text" id="ovWidth" placeholder="420px" maxlength="8"></label>
+          <label class="field"><span>Width <em>e.g. 420px or 80%</em></span><input type="text" id="ovWidth" placeholder="420px" maxlength="8" aria-describedby="ovWidthHint"><small class="hint hidden" id="ovWidthHint"></small></label>
+          <label class="field"><span>Bubble width</span><select id="ovBubble"><option value="">Fit to text (default)</option><option value="full">Full width</option></select></label>
           <label class="field"><span>Side</span><select id="ovAlign"><option value="">Default (left)</option><option value="left">Left</option><option value="center">Center</option><option value="right">Right</option></select></label>
           <label class="field"><span>New messages</span><select id="ovOrder"><option value="">Default (on top, going down)</option><option value="top">On top, going down</option><option value="bottom">At the bottom, going up</option></select></label>
           <label class="field"><span>Fade after <em>seconds · empty = Display setting (25 s)</em></span><input type="number" id="ovFade" min="0" max="3600" step="1" placeholder="25"></label>
-          <label class="field"><span>Text size <em>px · empty = Display setting</em></span><input type="number" id="ovSize" min="8" max="200" step="1"></label>
-          <label class="field"><span>Keep clear around the chat <em>top,right,bottom,left e.g. 5%,10%,20%,5%</em></span><input type="text" id="ovPad" maxlength="40"></label>
+          <label class="field"><span>Text size <em>px, before fit scaling · empty = Display setting</em></span><input type="number" id="ovSize" min="8" max="200" step="1"></label>
+          <label class="field"><span>Bubble opacity <em>0 = see-through, 100 = solid · default 55</em></span><input type="number" id="ovOpacity" min="0" max="100" step="5" placeholder="55"></label>
+          <label class="field"><span>Bubble width padding <em>px left/right inside · default 8 · bigger = fatter</em></span><input type="number" id="ovPadx" min="0" max="60" step="1" placeholder="8"></label>
+          <label class="field"><span>Bubble height padding <em>px top/bottom inside · default 4 · bigger = taller</em></span><input type="number" id="ovPady" min="0" max="60" step="1" placeholder="4"></label>
+          <label class="field"><span>Corner roundness <em>px · default 8</em></span><input type="number" id="ovRadius" min="0" max="60" step="1" placeholder="8"></label>
+          <label class="field"><span>Space between bubbles <em>px · default 3</em></span><input type="number" id="ovGap" min="0" max="60" step="1" placeholder="3"></label>
+          <label class="field"><span>Keep clear around the chat <em>top,right,bottom,left e.g. 5%,10%,20%,5%</em></span><input type="text" id="ovPad" maxlength="40" aria-describedby="ovPadHint"><small class="hint hidden" id="ovPadHint"></small></label>
+          <label class="check"><input type="checkbox" id="ovOutline"> Outline the text (readable on any background)</label>
+        </div>
+        <div class="ov-preview">
+          <div class="ov-bar">
+            <b id="ovPreviewTitle">Preview</b>
+            <div class="ov-seg" role="group" aria-label="Preview background">
+              <button class="btn small" type="button" data-ov-bg="checker" aria-pressed="true">Checkered</button>
+              <button class="btn small" type="button" data-ov-bg="dark" aria-pressed="false">Dark</button>
+              <button class="btn small" type="button" data-ov-bg="light" aria-pressed="false">Light</button>
+            </div>
+          </div>
+          <div class="ov-stage" id="ovStage" data-bg="checker"><iframe id="ovPreview" title="Overlay preview with sample messages" tabindex="-1"></iframe></div>
         </div>
       </details>
       <details class="adv">
@@ -73,10 +98,17 @@
         <p class="help">Use the overlay link as an OBS <b>Browser</b> source, or embed it on a website with an <code>&lt;iframe&gt;</code> (without your key). Add options to the link, e.g. <code>&amp;fade=20&amp;size=22&amp;chat=0</code>:</p>
         <span class="code-block">layout=vertical   landscape (default) or vertical presets
 width=420px  how wide the chat is (px or %)
+bubble=fit   fit (bubbles only as wide as their text; default) or full (always the full width)
 align=left   left, center or right
 order=top    top (new on top, going down; default) or bottom
+opacity=55   bubble background, 0 (see-through) to 100 (solid)
+padx=8 pady=4   space inside each bubble in px (fatter/slimmer, taller/shorter)
+radius=8 gap=3  corner roundness and space between bubbles in px
+outline=1    dark outline around the text, readable on any background
+mask=0       no soft fade at the bottom edge of the chat
 fade=25      seconds before messages fade (0 = never)
-size=20      font size in px
+size=20      font size in px (before fit scaling)
+demo=1       sample messages only, no connections (the Settings preview)
 max=30       messages kept on screen
 chat=0       alerts only
 alerts=0     chat only
@@ -84,7 +116,7 @@ platforms=twitch   only these platforms
 sound=1      play alert sounds
 ts=1         show timestamps
 system=1     show connection messages
-fit=1        text scales with the source size (same link works in landscape and vertical scenes)
+fit=1        text and bubbles scale with the source size (same link works in landscape and vertical scenes)
 pad=5%,12%,20%,5%   keep space clear: top,right,bottom,left (or one value for all), px or %
 embed=1      website: a note while chat is empty (Copy embed adds it)</span>
       </details>

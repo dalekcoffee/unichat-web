@@ -842,7 +842,35 @@
     return { start: r.startedAt, chips, supporters, followers: [...followers.values()], raids };
   }
 
-  const VERSION = '0.0.50';
+  // ---------- Overlay lengths: shared by the overlay (reads the link) and Settings (checks what you type) ----------
+  /** "420", "420px" or "80%" → [number, unit], or null when it isn't one. */
+  function splitLen(raw) {
+    const m = /^(\d{1,4}(?:\.\d{1,2})?)(px|%)?$/.exec(String(raw == null ? '' : raw).trim());
+    return m ? [Number(m[1]), m[2] || 'px'] : null;
+  }
+
+  /** &width=… : a number with px or % → "420px" / "80%" kept within sensible limits; null when empty or not a length. */
+  function parseWidth(raw) {
+    const l = splitLen(raw);
+    if (!l) return null;
+    return l[1] === '%' ? Math.min(100, Math.max(10, l[0])) + '%' : Math.min(4000, Math.max(120, l[0])) + 'px';
+  }
+
+  /** &pad=… : space kept clear, "all" or "top,right,bottom,left", each px or % → CSS padding; null when empty or not valid. */
+  function parsePad(raw) {
+    if (!raw) return null;
+    const parts = String(raw).split(',').map(s => s.trim());
+    if (parts.length !== 1 && parts.length !== 4) return null;
+    const out = [];
+    for (const p of parts) {
+      const l = splitLen(p);
+      if (!l) return null;
+      out.push(l[1] === '%' ? Math.min(40, l[0]) + '%' : Math.min(1000, l[0]) + 'px');
+    }
+    return out.join(' ');
+  }
+
+  const VERSION = '0.0.51';
   window.UniChat = { VERSION, api, storePin, fmtMoney, icon, esc, safeUrl, safeColor, renderEvent, connect, Sound, Speech, classify, nameHasSlur, plainText, NAMES, PLATFORMS, ALERT_KINDS, KIND_LABEL, KIND_EMOJI, fmtTime, nameHtml, avatarHtml, swapAvatar, partsHtml, shownParts, userColor, statusTone, attemptText, fmtCount, fmtDuration,
-    profileUrl, supportChips, recapSummary, plural };
+    profileUrl, supportChips, recapSummary, plural, parseWidth, parsePad };
 })();

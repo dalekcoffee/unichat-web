@@ -19,7 +19,11 @@
     platforms: q.has('platforms') ? new Set(q.get('platforms').split(',').map(s => s.trim().toLowerCase())) : null,
     embed: q.get('embed') === '1',
     fit: q.get('fit') === '1',
+    outline: q.get('outline') === '1',
+    mask: q.get('mask') !== '0',
+    demo: q.get('demo') === '1',
   };
+  if (opt.demo) opt.sound = false; // the Settings preview shows sample lines only: no connections, no sounds
 
   // &layout=landscape|vertical sets sensible defaults for that kind of scene; any option in the link still wins.
   const LAYOUTS = {
@@ -31,51 +35,70 @@
   // An embedded website chat keeps the plain full-width, newest-at-the-bottom look unless the link says otherwise.
   const plain = opt.embed && !q.has('layout');
 
-  /** &width=… : how wide the chat is, a number with px or % (default 420px; narrower reads better on stream). */
-  function parseWidth(raw) {
-    const m = /^(\d{1,4}(?:\.\d{1,2})?)(px|%)?$/.exec((raw || '').trim());
-    if (!m) return null;
-    const n = Number(m[1]);
-    return m[2] === '%' ? Math.min(100, Math.max(10, n)) + '%' : Math.min(4000, Math.max(120, n)) + 'px';
-  }
-  const width = parseWidth(q.get('width')) || (plain ? '100%' : preset.width);
+  // &width=… : how wide the chat is, a number with px or % (default 420px; narrower reads better on stream).
+  const width = U.parseWidth(q.get('width')) || (plain ? '100%' : preset.width);
   const alignRaw = q.get('align') || preset.align;
   const align = ['left', 'right', 'center'].includes(alignRaw) ? alignRaw : 'left';
   const orderRaw = q.get('order') || (plain ? 'bottom' : preset.order);
   const newestTop = orderRaw !== 'bottom';
-  feed.style.setProperty('--ov-w', width);
+  // &bubble=fit|full : each bubble is only as wide as its text (up to the width above), or always the full width.
+  // An embedded website chat with no layout keeps the plain full-width lines.
+  const bubbleFit = q.get('bubble') === 'full' ? false : q.get('bubble') === 'fit' ? true : !plain;
+  // Bubble look: &opacity=0-100 (background strength), &padx / &pady (px inside the bubble: fatter or slimmer, taller or
+  // shorter), &radius (corner roundness px), &gap (px between bubbles). Limited so a link can't make a mess.
+  const opacity = within('opacity', 0, 100);
+  if (opacity != null) {
+    feed.style.setProperty('--ov-bg-a', String(opacity / 100));
+    feed.style.setProperty('--ov-bg-a2', String(Math.min(1, opacity / 100 + 0.15)));
+  }
+  [['padx', '--ov-px', 0, 60], ['pady', '--ov-py', 0, 60], ['radius', '--ov-r', 0, 60], ['gap', '--ov-gap', 0, 60]].forEach(([name, prop, lo, hi]) => {
+    const n = within(name, lo, hi);
+    if (n != null) feed.style.setProperty(prop, n + 'px');
+  });
+  // A width in px grows with the text under fit (the bubble keeps its shape); a % already follows the source.
+  feed.style.setProperty('--ov-w', width.endsWith('px') ? `calc(${width} * var(--k, 1))` : width);
   feed.style.setProperty('--ov-align', align === 'left' ? 'flex-start' : align === 'right' ? 'flex-end' : 'center');
   document.body.classList.toggle('order-top', newestTop);
+  document.body.classList.toggle('bubble-fit', bubbleFit);
+  document.body.classList.add('align-' + align);
+  // &outline=1: a dark stroke around the text so it reads on any background; &mask=0: no soft fade at the bottom edge.
+  document.body.classList.toggle('outline', opt.outline);
+  document.body.classList.toggle('no-mask', !opt.mask);
 
-  /** &pad=… : space kept clear around the chat, "all", or "top,right,bottom,left"; each a number with px or %, e.g. 5%,12%,20%,5%. */
-  function parsePad(raw) {
-    if (!raw) return null;
-    const parts = raw.split(',').map(s => s.trim());
-    if (parts.length !== 1 && parts.length !== 4) return null;
-    const out = [];
-    for (const p of parts) {
-      const m = /^(\d{1,4}(?:\.\d{1,2})?)(px|%)?$/.exec(p);
-      if (!m) return null;
-      const n = Number(m[1]), pct = m[2] === '%';
-      out.push(pct ? Math.min(40, n) + '%' : Math.min(1000, n) + 'px');
-    }
-    return out.join(' ');
-  }
-  const pad = parsePad(q.get('pad') || (plain ? '' : preset.pad));
+  // &pad=… : space kept clear around the chat, "all", or "top,right,bottom,left"; each a number with px or %, e.g. 5%,12%,20%,5%.
+  const pad = U.parsePad(q.get('pad') || (plain ? '' : preset.pad));
   if (pad) feed.style.padding = pad;
 
-  // &fit=1: the text grows and shrinks with the source, so one link reads the same in a landscape and a vertical scene.
-  // Reference is a 480 px wide chat box; limited so a huge source doesn't get giant text nor a tiny one unreadable.
+  // &fit=1: the text and bubbles grow and shrink with the source, so one link reads the same in a landscape and a vertical
+  // scene. Reference is a 480 px wide chat box; limited so a huge source doesn't get giant text nor a tiny one unreadable.
   function fitFactor() {
     if (!opt.fit) return 1;
     return Math.min(3, Math.max(0.75, window.innerWidth / 480));
   }
+  /** How wide the chat column really is on screen (the width setting, within the room the padding leaves). */
+  function columnPx(k) {
+    const cs = getComputedStyle(feed);
+    const room = feed.clientWidth - (parseFloat(cs.paddingLeft) || 0) - (parseFloat(cs.paddingRight) || 0);
+    const m = /^([\d.]+)(px|%)$/.exec(width);
+    return Math.max(0, Math.min(room, m[2] === '%' ? room * Number(m[1]) / 100 : Number(m[1]) * k));
+  }
   function applySize() {
     const d = (settings && settings.display) || {};
-    document.documentElement.style.setProperty('--fs', (opt.size || d.fontSize || 16) * fitFactor() + 'px');
-    document.body.classList.toggle('narrow', window.innerWidth < 300 * (opt.fit ? fitFactor() : 1));
+    const k = fitFactor();
+    const fs = (opt.size || d.fontSize || 16) * k;
+    document.documentElement.style.setProperty('--fs', fs + 'px');
+    document.documentElement.style.setProperty('--k', String(k));
+    // Tight columns (a vertical scene) lose the avatar and time so the words get the room: under about 18 text-heights wide.
+    document.body.classList.toggle('narrow', columnPx(k) < 18 * fs);
   }
-  if (opt.fit) window.addEventListener('resize', applySize);
+  /** Older lines drop off the bottom once they no longer fit above the bottom padding (newest-on-top only). */
+  function trim() {
+    if (!newestTop) return;
+    const limit = feed.getBoundingClientRect().bottom - (parseFloat(getComputedStyle(feed).paddingBottom) || 0);
+    while (feed.children.length > 1 && feed.lastElementChild.getBoundingClientRect().bottom > limit + 1) feed.lastElementChild.remove();
+  }
+  window.addEventListener('resize', () => { applySize(); trim(); });
+  feed.addEventListener('load', trim, true); // an emote or GIF finishing its load changes a line's height
 
   // On a website (Settings → Copy embed adds embed=1): a quiet note while no message is showing, so a quiet chat doesn't
   // look broken to visitors (a new visitor has no history). Never in OBS, where it would show on stream.
@@ -108,7 +131,7 @@
   // (Settings → Display, 6 s by default) to land closer to the voice. It never speaks itself.
   const held = new Map(); // id → timer
   function holdSeconds(e) {
-    if (!settings || e.missed || e.kind === 'chat' || e.kind === 'system') return 0;
+    if (!settings || opt.demo || e.missed || e.kind === 'chat' || e.kind === 'system') return 0;
     const sec = settings.display && settings.display.overlayVoiceDelaySec;
     if (!(sec > 0)) return 0;
     // "Read alerts aloud" may be off in the overlay's own link even when the chat page has it on, so only the kinds count.
@@ -138,7 +161,7 @@
       feed.prepend(el);
       // Older lines drop off the bottom once they no longer fit, or past the message limit.
       while (feed.children.length > opt.max) feed.lastElementChild.remove();
-      while (feed.children.length > 1 && feed.scrollHeight > feed.clientHeight + 1) feed.lastElementChild.remove();
+      trim();
     } else {
       feed.appendChild(el);
       while (feed.children.length > opt.max) feed.firstElementChild.remove();
@@ -171,7 +194,37 @@
     document.addEventListener('pointerdown', () => U.Sound.unlock(), { passive: true });
   }
 
-  U.connect('overlay', {
+  // &demo=1 (the Settings preview): sample chat and alerts through the same drawing path. It never connects to anything,
+  // so previewing uses no platform connection or quota, and shows no real channel.
+  const DEMO = [
+    ['twitch', 'NightOwl', 'Hello everyone!'],
+    ['tiktok', 'PixelPanda', 'this stream is so cozy 🥰'],
+    ['kick', 'CozyGamer42', 'That last play was unreal, did you see the way the whole chat just lost it at once? I am still laughing about it.'],
+    ['twitch', 'SirChatsALot', 'gg'],
+    ['follow', 'PixelPanda', 'followed', 'tiktok'],
+    ['tiktok', 'TestViewer', 'Hi from the other side of the world, long time lurker, first time chatting!'],
+    ['twitch', 'NightOwl', 'lol'],
+    ['donation', 'CozyGamer42', 'sent Rose x5', 'tiktok', '5 coins', 'Keep it up!'],
+    ['kick', 'SirChatsALot', 'what game is next?'],
+    ['sub', 'NightOwl', 'subscribed for 3 months', 'twitch', '', 'Love the streams'],
+  ];
+  function startDemo() {
+    applySettings(window.UniChatStore.load());
+    let n = 0;
+    const next = () => {
+      const row = DEMO[n % DEMO.length];
+      const alert = ['follow', 'donation', 'sub'].includes(row[0]);
+      const e = { id: 'demo-' + (++n), ts: Date.now(), platform: alert ? row[3] : row[0], kind: alert ? row[0] : 'chat',
+        user: { name: row[1], login: row[1].toLowerCase(), roles: [] }, parts: [{ t: 'text', v: alert ? row[5] || '' : row[2] }] };
+      if (alert) Object.assign(e, { title: row[2], amount: row[4] });
+      add(e, true);
+    };
+    next(); next();
+    (function loop() { setTimeout(() => { next(); loop(); }, 1500 + Math.random() * 1800); })();
+  }
+
+  if (opt.demo) startDemo();
+  else U.connect('overlay', {
     onMessage(msg) {
       switch (msg.type) {
         case 'hello':

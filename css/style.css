@@ -351,24 +351,43 @@ body.no-platform-colors .msg:not(.alert):not(.hl) { border-left-color: transpare
 }
 
 /* ---------- Overlay ---------- */
+/* --k is the fit factor (1 without &fit=1): bubble padding, corners, spacing and a px width grow with the text. */
 body.overlay { background: transparent; overflow: hidden; }
 body.overlay .feed { position: fixed; inset: 0; overflow: hidden; display: flex; flex-direction: column; justify-content: flex-end; padding: 10px; }
 body.overlay .msg {
-  background: rgba(10, 10, 16, .55);
-  color: #fff; margin: 3px 0;
+  background: rgba(10, 10, 16, var(--ov-bg-a, .55));
+  padding: calc(var(--ov-py, 4px) * var(--k, 1)) calc(var(--ov-px, 8px) * var(--k, 1)); border-radius: calc(var(--ov-r, 8px) * var(--k, 1));
+  color: #fff; margin: calc(var(--ov-gap, 3px) * var(--k, 1)) 0;
   text-shadow: 0 1px 2px rgba(0,0,0,.8);
   transition: opacity .8s ease, transform .8s ease;
 }
 body.overlay .feed { box-sizing: border-box; }
 body.overlay .msg { flex: none; width: var(--ov-w, 100%); max-width: 100%; align-self: var(--ov-align, flex-start); box-sizing: border-box; }
-body.overlay.order-top .feed { justify-content: flex-start; -webkit-mask-image: linear-gradient(#000 88%, transparent); mask-image: linear-gradient(#000 88%, transparent); }
+/* Bubbles fit their text: a short message is a small bubble, long text wraps at the width. &bubble=full keeps them full width. */
+body.overlay.bubble-fit .msg { width: auto; max-width: min(var(--ov-w, 100%), 100%); }
+/* New lines come in on top, so the soft fade sits at the bottom edge of the chat area (inside the padding), not the screen's. */
+body.overlay.order-top .feed { justify-content: flex-start; }
+body.overlay.order-top:not(.no-mask) .feed {
+  -webkit-mask-image: linear-gradient(#000 94%, transparent); mask-image: linear-gradient(#000 94%, transparent);
+  -webkit-mask-origin: content-box; mask-origin: content-box; -webkit-mask-repeat: no-repeat; mask-repeat: no-repeat;
+  -webkit-mask-size: 100% 100%; mask-size: 100% 100%;
+}
+body.overlay.order-top .msg { animation-name: msg-in-top; }
+@keyframes msg-in-top { from { opacity: 0; transform: translateY(-6px); } }
 body.overlay .msg img { max-width: 100%; }
 /* Narrow sources (a vertical scene): tighter lines, no avatar or time so the words get the room. */
-body.overlay.narrow .msg { padding: 3px 6px; }
 body.overlay.narrow .msg .avatar, body.overlay.narrow .msg .ts { display: none; }
-body.overlay .msg.alert { background: rgba(40, 32, 70, .75); background: color-mix(in srgb, var(--a) 35%, rgba(10,10,16,.7)); }
+body.overlay .msg.alert { background: rgba(40, 32, 70, var(--ov-bg-a2, .75)); background: color-mix(in srgb, var(--a) 35%, rgba(10,10,16,var(--ov-bg-a2, .7))); }
 body.overlay .msg .ts { color: rgba(255,255,255,.6); }
+/* A line leaves sideways toward its edge: left-aligned slides left, right-aligned right, centered only fades. */
 body.overlay .msg.gone { opacity: 0; transform: translateX(-12px); }
+body.overlay.align-right .msg.gone { transform: translateX(12px); }
+body.overlay.align-center .msg.gone { transform: none; }
+/* &outline=1: a dark stroke all around the letters (eight directions, in em so it scales with the text). */
+body.overlay.outline .msg {
+  text-shadow: -.07em -.07em 0 #000, .07em -.07em 0 #000, -.07em .07em 0 #000, .07em .07em 0 #000,
+    0 -.07em 0 #000, 0 .07em 0 #000, -.07em 0 0 #000, .07em 0 0 #000, 0 0 .22em #000;
+}
 body.overlay .embed-note { position: fixed; left: 0; right: 0; bottom: 0; margin: 0; padding: 14px 16px; text-align: center; color: rgba(255,255,255,.55); font-size: 14px; }
 body.overlay .msg-actions, body.overlay .msg .reply { display: none; }
 body.overlay .name[data-viewer] { cursor: default; text-decoration: none; }
@@ -851,6 +870,26 @@ body.settings .check input[type=checkbox]:focus-visible, .switch input[type=chec
   background: var(--bg); color: var(--text-dim); font-family: Consolas, "Cascadia Mono", monospace; font-size: 12.5px;
 }
 .link-btns { display: flex; gap: 6px; }
+
+/* Settings → Overlay look: layout tabs, the boxes, and the live preview (the overlay in a frame, scaled down from a real scene size) */
+.ov-look > * + * { margin-top: 12px; }
+.ov-bar { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px; }
+.ov-seg { display: inline-flex; }
+.ov-seg .btn { border-radius: 0; margin-left: -1px; }
+.ov-seg .btn:first-child { border-radius: 8px 0 0 8px; margin-left: 0; }
+.ov-seg .btn:last-child { border-radius: 0 8px 8px 0; }
+.ov-seg .btn[aria-pressed=true] { background: color-mix(in srgb, var(--accent) 22%, var(--bg-elev-2)); border-color: var(--accent); position: relative; z-index: 1; }
+.field input[aria-invalid=true] { border-color: var(--err); }
+.field .hint { color: var(--err); font-size: 12.5px; line-height: 1.4; }
+.ov-stage { position: relative; overflow: hidden; border: 1px solid var(--line); border-radius: 10px; margin-top: 8px; max-width: 100%; }
+.ov-stage iframe { position: absolute; left: 0; top: 0; border: 0; transform-origin: 0 0; pointer-events: none; color-scheme: dark; /* same as the overlay page, so it stays see-through */ }
+.ov-stage[data-bg=dark] { background: #111; }
+.ov-stage[data-bg=light] { background: #f2f2f2; }
+.ov-stage[data-bg=checker] {
+  background-color: #6a6a74;
+  background-image: linear-gradient(45deg, #54545e 25%, transparent 25%, transparent 75%, #54545e 75%), linear-gradient(45deg, #54545e 25%, transparent 25%, transparent 75%, #54545e 75%);
+  background-size: 20px 20px; background-position: 0 0, 10px 10px;
+}
 
 /* Nimo TV: name box with a Find button, and the search results to pick from */
 .input-btn { display: flex; gap: 8px; align-items: center; }
