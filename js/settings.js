@@ -159,9 +159,9 @@
   // Basic: one row per kind, with what it does (sound, big popup, read aloud). Chat can't pop up or be read aloud.
   const GRID = [['chat', '💬 Chat'], ['follow', '💙 Follow'], ['donation', '💰 Donation'], ['sub', '⭐ Sub'], ['raid', '🚀 Raid']];
   const tick = (path, label) => `<label class="ag-cell" title="${label}"><input type="checkbox" data-path="${path}" aria-label="${label}"></label>`;
-  $('#alertGrid').innerHTML = '<div class="ag-row ag-head"><span></span><span>Sound</span><span>Popup</span><span>Read aloud</span></div>' +
-    GRID.map(([k, l]) => `<div class="ag-row"><span class="ag-name">${l}</span>${tick(`alerts.kinds.${k}.sound`, `${l}: sound`)}${k === 'chat' ? '<span></span><span></span>'
-      : tick(`popup.kinds.${k}`, `${l}: big popup`) + tick(`tts.kinds.${k}`, `${l}: read aloud`)}</div>`).join('');
+  $('#alertGrid').innerHTML = '<div class="ag-row ag-head"><span></span><span>Sound</span><span>Popup</span><span>Read aloud</span><span>Overlay</span></div>' +
+    GRID.map(([k, l]) => `<div class="ag-row"><span class="ag-name">${l}</span>${tick(`alerts.kinds.${k}.sound`, `${l}: sound`)}${k === 'chat' ? '<span></span><span></span><span></span>'
+      : tick(`popup.kinds.${k}`, `${l}: big popup`) + tick(`tts.kinds.${k}`, `${l}: read aloud`) + tick(`overlay.kinds.${k}`, `${l}: show in overlay`)}</div>`).join('');
 
   // The overall Volume (every sound and the voice, on top of their own volumes) also applies to the tests on this page.
   const useMasterVolume = () => U.Sound.setMaster(Number($('[data-path="alerts.masterVolume"]').value));

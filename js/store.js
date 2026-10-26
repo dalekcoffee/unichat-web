@@ -63,6 +63,8 @@
       hideSlurs: true, // the built-in list of the worst slurs (js/common.js SLURS), on top of blockedWords
     },
     highlights: { enabled: true, mentions: true, keywords: [], firstTimeChatters: true, sound: true, soundName: 'builtin:ding', volume: 0.5 },
+    // Which alert kinds the OBS/website overlay shows (Settings → Alerts & voice → Overlay column).
+    overlay: { kinds: { follow: true, donation: true, sub: true, raid: true } },
     popup: { enabled: true, seconds: 18, kinds: { follow: false, donation: true, sub: true, raid: true } },
     // Stream preview button (chat page top bar): your stream in a popup, from Beam's player (beamstream.gg/<beam>/embed).
     // Loaded only while the popup is open. TikTok LIVE can't be shown inside other sites, so Beam is the one player.

@@ -123,6 +123,8 @@
     if (e.kind === 'system') return opt.system;
     if (opt.platforms && !opt.platforms.has(e.platform)) return false;
     if (e.kind === 'chat') return opt.chat;
+    const ok = settings && settings.overlay && settings.overlay.kinds;
+    if (ok && ok[e.kind] === false) return false; // switched off in Settings → Alerts & voice
     return opt.alerts;
   }
 
