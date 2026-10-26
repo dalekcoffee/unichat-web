@@ -870,7 +870,7 @@
     return out.join(' ');
   }
 
-  const VERSION = '0.0.51';
+  const VERSION = '0.0.52';
   window.UniChat = { VERSION, api, storePin, fmtMoney, icon, esc, safeUrl, safeColor, renderEvent, connect, Sound, Speech, classify, nameHasSlur, plainText, NAMES, PLATFORMS, ALERT_KINDS, KIND_LABEL, KIND_EMOJI, fmtTime, nameHtml, avatarHtml, swapAvatar, partsHtml, shownParts, userColor, statusTone, attemptText, fmtCount, fmtDuration,
     profileUrl, supportChips, recapSummary, plural, parseWidth, parsePad };
 })();
