@@ -359,6 +359,13 @@ body.overlay .msg {
   text-shadow: 0 1px 2px rgba(0,0,0,.8);
   transition: opacity .8s ease, transform .8s ease;
 }
+body.overlay .feed { box-sizing: border-box; }
+body.overlay .msg { flex: none; width: var(--ov-w, 100%); max-width: 100%; align-self: var(--ov-align, flex-start); box-sizing: border-box; }
+body.overlay.order-top .feed { justify-content: flex-start; -webkit-mask-image: linear-gradient(#000 88%, transparent); mask-image: linear-gradient(#000 88%, transparent); }
+body.overlay .msg img { max-width: 100%; }
+/* Narrow sources (a vertical scene): tighter lines, no avatar or time so the words get the room. */
+body.overlay.narrow .msg { padding: 3px 6px; }
+body.overlay.narrow .msg .avatar, body.overlay.narrow .msg .ts { display: none; }
 body.overlay .msg.alert { background: rgba(40, 32, 70, .75); background: color-mix(in srgb, var(--a) 35%, rgba(10,10,16,.7)); }
 body.overlay .msg .ts { color: rgba(255,255,255,.6); }
 body.overlay .msg.gone { opacity: 0; transform: translateX(-12px); }

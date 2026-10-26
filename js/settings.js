@@ -298,10 +298,28 @@
   keyBox.checked = prefs.get('unichat.web.linkIncludesKey', false);
   keyBox.addEventListener('change', () => { prefs.set('unichat.web.linkIncludesKey', keyBox.checked); updateLinks(); });
 
+  // Overlay layout fields: remembered in this browser, added to both overlay links when filled in.
+  const ovFields = { width: '#ovWidth', align: '#ovAlign', order: '#ovOrder', fade: '#ovFade', size: '#ovSize', pad: '#ovPad' };
+  Object.entries(ovFields).forEach(([name, sel]) => {
+    const el = $(sel);
+    el.value = prefs.get('unichat.web.ov.' + name, '');
+    const onChange = () => { prefs.set('unichat.web.ov.' + name, el.value); updateLinks(); };
+    el.addEventListener('input', onChange);
+    el.addEventListener('change', onChange);
+  });
+  function overlayQuery(layout) {
+    const q = new URLSearchParams({ layout });
+    Object.entries(ovFields).forEach(([name, sel]) => { const v = $(sel).value.trim(); if (v !== '') q.set(name, v); });
+    return q.toString();
+  }
+
   function updateLinks() {
     const s = collect();
     const chat = Store.shareUrl(s, 'index.html', keyBox.checked);
-    const overlay = Store.shareUrl(s, 'overlay.html', keyBox.checked);
+    const overlay = Store.shareUrl(s, 'overlay.html', keyBox.checked, overlayQuery('landscape'));
+    const overlayV = Store.shareUrl(s, 'overlay.html', keyBox.checked, overlayQuery('vertical'));
+    $('#overlayLinkV').value = overlayV;
+    $('#overlayOpenV').href = overlayV;
     // Links that read TikTok through the relay never carry a key, so the choice is hidden then.
     const relay = Store.usesRelay(s);
     $('#linkKeyRow').classList.toggle('hidden', relay);

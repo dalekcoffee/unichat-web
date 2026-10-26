@@ -1,4 +1,4 @@
-/* OBS overlay: transparent background, newest at the bottom, messages fade out. */
+/* OBS overlay: transparent background, newest on top going down (or at the bottom), messages fade out. */
 (function () {
   'use strict';
   const U = window.UniChat;
@@ -18,7 +18,64 @@
     system: q.get('system') === '1',
     platforms: q.has('platforms') ? new Set(q.get('platforms').split(',').map(s => s.trim().toLowerCase())) : null,
     embed: q.get('embed') === '1',
+    fit: q.get('fit') === '1',
   };
+
+  // &layout=landscape|vertical sets sensible defaults for that kind of scene; any option in the link still wins.
+  const LAYOUTS = {
+    landscape: { width: '420px', align: 'left', order: 'top' },
+    vertical: { width: '100%', align: 'left', order: 'top', fit: true, pad: '6%,8%,24%,6%' },
+  };
+  const preset = LAYOUTS[q.get('layout')] || LAYOUTS.landscape;
+  if (!q.has('fit') && preset.fit) opt.fit = true;
+  // An embedded website chat keeps the plain full-width, newest-at-the-bottom look unless the link says otherwise.
+  const plain = opt.embed && !q.has('layout');
+
+  /** &width=… : how wide the chat is, a number with px or % (default 420px; narrower reads better on stream). */
+  function parseWidth(raw) {
+    const m = /^(\d{1,4}(?:\.\d{1,2})?)(px|%)?$/.exec((raw || '').trim());
+    if (!m) return null;
+    const n = Number(m[1]);
+    return m[2] === '%' ? Math.min(100, Math.max(10, n)) + '%' : Math.min(4000, Math.max(120, n)) + 'px';
+  }
+  const width = parseWidth(q.get('width')) || (plain ? '100%' : preset.width);
+  const alignRaw = q.get('align') || preset.align;
+  const align = ['left', 'right', 'center'].includes(alignRaw) ? alignRaw : 'left';
+  const orderRaw = q.get('order') || (plain ? 'bottom' : preset.order);
+  const newestTop = orderRaw !== 'bottom';
+  feed.style.setProperty('--ov-w', width);
+  feed.style.setProperty('--ov-align', align === 'left' ? 'flex-start' : align === 'right' ? 'flex-end' : 'center');
+  document.body.classList.toggle('order-top', newestTop);
+
+  /** &pad=… : space kept clear around the chat, "all", or "top,right,bottom,left"; each a number with px or %, e.g. 5%,12%,20%,5%. */
+  function parsePad(raw) {
+    if (!raw) return null;
+    const parts = raw.split(',').map(s => s.trim());
+    if (parts.length !== 1 && parts.length !== 4) return null;
+    const out = [];
+    for (const p of parts) {
+      const m = /^(\d{1,4}(?:\.\d{1,2})?)(px|%)?$/.exec(p);
+      if (!m) return null;
+      const n = Number(m[1]), pct = m[2] === '%';
+      out.push(pct ? Math.min(40, n) + '%' : Math.min(1000, n) + 'px');
+    }
+    return out.join(' ');
+  }
+  const pad = parsePad(q.get('pad') || (plain ? '' : preset.pad));
+  if (pad) feed.style.padding = pad;
+
+  // &fit=1: the text grows and shrinks with the source, so one link reads the same in a landscape and a vertical scene.
+  // Reference is a 480 px wide chat box; limited so a huge source doesn't get giant text nor a tiny one unreadable.
+  function fitFactor() {
+    if (!opt.fit) return 1;
+    return Math.min(3, Math.max(0.75, window.innerWidth / 480));
+  }
+  function applySize() {
+    const d = (settings && settings.display) || {};
+    document.documentElement.style.setProperty('--fs', (opt.size || d.fontSize || 16) * fitFactor() + 'px');
+    document.body.classList.toggle('narrow', window.innerWidth < 300 * (opt.fit ? fitFactor() : 1));
+  }
+  if (opt.fit) window.addEventListener('resize', applySize);
 
   // On a website (Settings → Copy embed adds embed=1): a quiet note while no message is showing, so a quiet chat doesn't
   // look broken to visitors (a new visitor has no history). Never in OBS, where it would show on stream.
@@ -77,8 +134,15 @@
     const cls = U.classify(e, settings);
     if (cls.hidden) return;
     const el = U.renderEvent(e, 'dark', cls);
-    feed.appendChild(el);
-    while (feed.children.length > opt.max) feed.firstElementChild.remove();
+    if (newestTop) {
+      feed.prepend(el);
+      // Older lines drop off the bottom once they no longer fit, or past the message limit.
+      while (feed.children.length > opt.max) feed.lastElementChild.remove();
+      while (feed.children.length > 1 && feed.scrollHeight > feed.clientHeight + 1) feed.lastElementChild.remove();
+    } else {
+      feed.appendChild(el);
+      while (feed.children.length > opt.max) feed.firstElementChild.remove();
+    }
 
     const fade = fadeSeconds();
     if (fade > 0) {
@@ -92,7 +156,7 @@
   function applySettings(s) {
     settings = s;
     const d = s.display || {};
-    document.documentElement.style.setProperty('--fs', (opt.size || d.fontSize || 16) + 'px');
+    applySize();
     document.body.classList.toggle('no-ts', !opt.ts);
     document.body.classList.toggle('no-pf', !d.showPlatformIcons);
     document.body.classList.toggle('no-badges', !d.showBadges);

@@ -39,9 +39,14 @@
           <div class="link-btns"><button class="btn small" type="button" data-copy="chatLink">Copy</button><a class="btn small" id="chatOpen" href="index.html">Open</a></div>
         </div>
         <div class="link-row">
-          <span class="label">Overlay</span>
-          <input type="text" readonly id="overlayLink" aria-label="Overlay link">
+          <span class="label">Overlay · landscape</span>
+          <input type="text" readonly id="overlayLink" aria-label="Overlay link for landscape scenes">
           <div class="link-btns"><button class="btn small" type="button" data-copy="overlayLink">Copy</button><a class="btn small" id="overlayOpen" href="overlay.html" target="_blank" rel="noopener noreferrer">Open</a></div>
+        </div>
+        <div class="link-row">
+          <span class="label">Overlay · vertical</span>
+          <input type="text" readonly id="overlayLinkV" aria-label="Overlay link for vertical scenes">
+          <div class="link-btns"><button class="btn small" type="button" data-copy="overlayLinkV">Copy</button><a class="btn small" id="overlayOpenV" href="overlay.html" target="_blank" rel="noopener noreferrer">Open</a></div>
         </div>
         <div class="link-row">
           <span class="label">Embed</span>
@@ -52,9 +57,25 @@
       <label class="check" id="linkKeyRow"><input type="checkbox" id="linkIncludesKey"> Include my TikTok (Euler) key in these links</label>
       <p class="help" id="linkKeyHelp">Leave this off for links you share or embed on a website: anyone with the key can use your free Euler quota. Turn it on for your own bookmarks on other devices. Everything after the <code>#</code> stays in the browser and is never sent to the website hosting UniChat.</p>
       <details class="adv">
+        <summary>Overlay layout</summary>
+        <p class="help">Use the landscape link in wide scenes and the vertical link in vertical ones (one OBS Browser source per scene). These fields change both overlay links; leave one empty to keep its default.</p>
+        <div class="grid">
+          <label class="field"><span>Width <em>e.g. 420px or 80% · default 420px landscape, 100% vertical</em></span><input type="text" id="ovWidth" placeholder="420px" maxlength="8"></label>
+          <label class="field"><span>Side</span><select id="ovAlign"><option value="">Default (left)</option><option value="left">Left</option><option value="center">Center</option><option value="right">Right</option></select></label>
+          <label class="field"><span>New messages</span><select id="ovOrder"><option value="">Default (on top, going down)</option><option value="top">On top, going down</option><option value="bottom">At the bottom, going up</option></select></label>
+          <label class="field"><span>Fade after <em>seconds · empty = Display setting (25 s)</em></span><input type="number" id="ovFade" min="0" max="3600" step="1" placeholder="25"></label>
+          <label class="field"><span>Text size <em>px · empty = Display setting</em></span><input type="number" id="ovSize" min="8" max="200" step="1"></label>
+          <label class="field"><span>Keep clear around the chat <em>top,right,bottom,left e.g. 5%,10%,20%,5%</em></span><input type="text" id="ovPad" maxlength="40"></label>
+        </div>
+      </details>
+      <details class="adv">
         <summary>Overlay &amp; embed options</summary>
         <p class="help">Use the overlay link as an OBS <b>Browser</b> source, or embed it on a website with an <code>&lt;iframe&gt;</code> (without your key). Add options to the link, e.g. <code>&amp;fade=20&amp;size=22&amp;chat=0</code>:</p>
-        <span class="code-block">fade=30      seconds before messages fade (0 = never)
+        <span class="code-block">layout=vertical   landscape (default) or vertical presets
+width=420px  how wide the chat is (px or %)
+align=left   left, center or right
+order=top    top (new on top, going down; default) or bottom
+fade=25      seconds before messages fade (0 = never)
 size=20      font size in px
 max=30       messages kept on screen
 chat=0       alerts only
@@ -63,6 +84,8 @@ platforms=twitch   only these platforms
 sound=1      play alert sounds
 ts=1         show timestamps
 system=1     show connection messages
+fit=1        text scales with the source size (same link works in landscape and vertical scenes)
+pad=5%,12%,20%,5%   keep space clear: top,right,bottom,left (or one value for all), px or %
 embed=1      website: a note while chat is empty (Copy embed adds it)</span>
       </details>
     </section>
